@@ -3,14 +3,11 @@ import { db } from "@/db";
 import { deliveryPincodes } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 
-export const dynamic = "force-dynamic";
-
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
 
   const pin = searchParams.get("pin")?.trim() ?? "";
 
-  // Only valid 6-digit PIN codes are accepted.
   if (!/^\d{6}$/.test(pin)) {
     return Response.json(
       { error: "Enter a valid 6-digit PIN code." },
