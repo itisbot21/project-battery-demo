@@ -1,9 +1,6 @@
 
 import Link from "next/link";
-import { headers } from "next/headers";
-import { redirect, notFound } from "next/navigation";
-
-import { auth } from "@/lib/auth";
+import { requireAdmin } from "@/lib/require-admin";
 import { db } from "@/db";
 import { products } from "@/db/schema";
 
@@ -15,15 +12,7 @@ export default async function AdminDashboard({
     updated?: string;
   }>;
 }) {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  if (!session) redirect("/admin/login");
-
-  const roles = session.user.role?.split(",") ?? [];
-
-  if (!roles.includes("admin")) notFound();
+  const session = await requireAdmin();
 
   const query = await searchParams;
 

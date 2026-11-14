@@ -16,7 +16,7 @@ import {
 
 const navItems = [
   { label: "Home", href: "/", icon: House },
-  { label: "Categories", href: "/#categories", icon: LayoutGrid },
+  { label: "Categories", href: "/#manufacturers", icon: LayoutGrid },
   { label: "Products", href: "/#products", icon: Search },
   { label: "Cart", href: "/cart", icon: ShoppingCart },
 ];
@@ -30,7 +30,7 @@ function activeSection() {
   const position = window.scrollY + navBottom + 24;
 
   const sections = [
-    { id: "categories", index: 1 },
+    { id: "manufacturers", index: 1 },
     { id: "products", index: 2 },
   ]
     .map(({ id, index }) => {
@@ -58,23 +58,19 @@ function activeSection() {
   return active;
 }
 
-export default function StorefrontNav() {
+export function StorefrontNav() {
   const pathname = usePathname();
   const navRef = useRef<HTMLDivElement>(null);
 
-  const [activeIndex, setActiveIndex] = useState(
-    pathname === "/cart" ? 3 : pathname === "/" ? 0 : -1
-  );
+  const [homeActiveIndex, setHomeActiveIndex] = useState(0);
+  const activeIndex = pathname === "/cart" ? 3 : pathname === "/" ? homeActiveIndex : -1;
 
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
-    if (pathname !== "/") {
-      setActiveIndex(pathname === "/cart" ? 3 : -1);
-      return;
-    }
+    if (pathname !== "/") return;
 
-    const onScroll = () => setActiveIndex(activeSection());
+    const onScroll = () => setHomeActiveIndex(activeSection());
 
     const onHash = () => {
       const hash = window.location.hash;
@@ -84,7 +80,7 @@ export default function StorefrontNav() {
       );
 
       if (index >= 0) {
-        setActiveIndex(index);
+        setHomeActiveIndex(index);
       } else {
         onScroll();
       }
@@ -134,12 +130,8 @@ export default function StorefrontNav() {
     };
   }, [menuOpen]);
 
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [pathname]);
-
   const choose = (index: number) => {
-    setActiveIndex(index);
+    setHomeActiveIndex(index);
     setMenuOpen(false);
   };
 

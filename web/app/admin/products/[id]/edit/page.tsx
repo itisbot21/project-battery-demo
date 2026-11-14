@@ -1,25 +1,12 @@
 import Link from "next/link";
-import { headers } from "next/headers";
 import { redirect, notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 export const instant = false;
 
-import { auth } from "@/lib/auth";
+import { requireAdmin } from "@/lib/require-admin";
 import { db } from "@/db";
 import { products } from "@/db/schema";
-
-async function requireAdmin() {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  if (!session) redirect("/admin/login");
-
-  const roles = session.user.role?.split(",") ?? [];
-
-  if (!roles.includes("admin")) notFound();
-}
 
 function getField(data: FormData, key: string) {
   const value = data.get(key);

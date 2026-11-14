@@ -1,30 +1,12 @@
 
 import Link from "next/link";
-import { headers } from "next/headers";
-import { redirect, notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { asc, eq } from "drizzle-orm";
 
-import { auth } from "@/lib/auth";
+import { requireAdmin } from "@/lib/require-admin";
 import { db } from "@/db";
 import { deliveryPincodes } from "@/db/schema";
-
-// Admin authentication
-async function requireAdmin() {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  if (!session) {
-    redirect("/admin/login");
-  }
-
-  const roles = session.user.role?.split(",") ?? [];
-
-  if (!roles.includes("admin")) {
-    notFound();
-  }
-}
 
 // Add a PIN code or reactivate an existing one
 async function addPincode(formData: FormData) {

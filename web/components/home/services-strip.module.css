@@ -1,0 +1,72 @@
+
+.viewport {
+  overflow: hidden;
+  width: 100%;
+
+  /* Soft fade at both edges */
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 7%,
+    #000 93%,
+    transparent
+  );
+
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 7%,
+    #000 93%,
+    transparent
+  );
+}
+
+.track {
+  display: flex;
+  width: max-content;
+
+  /* Continuous seamless scrolling */
+  animation: moveServices 32s linear infinite;
+  will-change: transform;
+}
+
+.group {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 34px;
+  padding-right: 34px;
+}
+
+/* Pause while hovering */
+.viewport:hover .track {
+  animation-play-state: paused;
+}
+
+@keyframes moveServices {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+/* Accessibility: no automatic motion when disabled */
+@media (prefers-reduced-motion: reduce) {
+  .viewport {
+    overflow-x: auto;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  .track {
+    animation: none;
+    will-change: auto;
+  }
+
+  .group:nth-child(2) {
+    display: none;
+  }
+}

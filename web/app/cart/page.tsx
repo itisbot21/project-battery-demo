@@ -1,53 +1,14 @@
-
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  AlertCircle,
-  ArrowLeft,
-  ArrowRight,
-  BatteryFull,
-  Check,
-  Minus,
-  Plus,
-  Recycle,
-  ShoppingBag,
-  Trash2,
-  Truck,
-  Wrench,
-} from "lucide-react";
-
-import StorefrontNav from "@/components/storefront-nav";
-import {
-  getCart,
-  removeFromCart,
-  updateCartQuantity,
-  type CartItem,
-} from "@/lib/cart";
-
-type Product = {
-  id: number;
-  brand: string;
-  model: string;
-  category: string;
-  stock: number;
-  withExchangePaise: number;
-  withoutExchangePaise: number;
-};
-
-const glass =
-  "rounded-[20px] border border-white/85 bg-white/60 shadow-[0_10px_32px_rgba(32,72,102,0.07),inset_0_1px_0_rgba(255,255,255,0.9)] ring-1 ring-[#89CFF0]/10 backdrop-blur-[18px]";
-
-const currency = new Intl.NumberFormat("en-IN", {
-  style: "currency",
-  currency: "INR",
-  maximumFractionDigits: 2,
-});
-
-function formatPrice(paise: number) {
-  return currency.format(paise / 100);
-}
+import { AlertCircle, ArrowLeft, ArrowRight, ShoppingBag } from "lucide-react";
+import { StorefrontNav } from "@/components/layout/storefront-nav";
+import { CartItemCard } from "@/components/cart/cart-item";
+import { CartSummary } from "@/components/cart/cart-summary";
+import { glass } from "@/components/cart/styles";
+import { getCart, removeFromCart, updateCartQuantity, type CartItem } from "@/lib/cart";
+import type { Product } from "@/types/product";
 
 export default function CartPage() {
   const [items, setItems] = useState<CartItem[]>([]);
@@ -58,9 +19,10 @@ export default function CartPage() {
 
   // Restore cart and fetch current product prices/stock.
   useEffect(() => {
-    setItems(getCart());
-
     const controller = new AbortController();
+    queueMicrotask(() => {
+      if (!controller.signal.aborted) setItems(getCart());
+    });
 
     async function loadProducts() {
       setLoading(true);
@@ -312,327 +274,29 @@ export default function CartPage() {
                 </div>
               )}
 
-              {rows.map(
-                ({
-                  item,
-                  product,
-                  unitPrice,
-                  subtotal,
-                  requested,
-                }) => {
-                  const maxReached =
-                    !product ||
-                    !["Car", "Bike"].includes(
-                      product.category
-                    ) ||
-                    requested >= product.stock ||
-                    item.quantity >= 10 ||
-                    totalItems >= 30;
-
-                  const overStock = product
-                    ? requested > product.stock
-                    : false;
-
-                  return (
-                    <article
-                      key={`${item.productId}-${item.exchange}`}
-                      className={`${glass} p-4 sm:p-5`}
-                    >
-                      {/* PRODUCT INFORMATION */}
-                      <div className="flex gap-3 sm:gap-5">
-
-                        {/* BATTERY PLACEHOLDER */}
-                        <div className="flex h-[84px] w-[84px] shrink-0 items-center justify-center rounded-[15px] border border-white/80 bg-[#E7F5FC]/80 text-[#398DB9] sm:h-[100px] sm:w-[100px]">
-                          <BatteryFull
-                            size={48}
-                            strokeWidth={1.4}
-                            aria-hidden="true"
-                          />
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-
-                            <div className="min-w-0">
-                              <h2 className="text-[15px] font-extrabold leading-6 text-[#193B54] sm:text-[17px]">
-                                {product
-                                  ? `${product.brand} ${product.model}`
-                                  : `Battery #${item.productId}`}
-                              </h2>
-
-                              {/* EXCHANGE BADGE */}
-                              <span
-                                className={`mt-2 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-semibold ${item.exchange === "with"
-                                    ? "bg-[#E5F7ED] text-[#278052]"
-                                    : "bg-[#E9F2F8] text-[#4E6A7F]"
-                                  }`}
-                              >
-                                {item.exchange === "with" && (
-                                  <Recycle
-                                    size={13}
-                                    aria-hidden="true"
-                                  />
-                                )}
-
-                                {item.exchange === "with"
-                                  ? "With old battery exchange"
-                                  : "Without exchange"}
-                              </span>
-                            </div>
-
-                            {/* REMOVE */}
-                            <button
-                              type="button"
-                              onClick={() => removeItem(item)}
-                              aria-label={`Remove ${product
-                                  ? `${product.brand} ${product.model}`
-                                  : "battery"
-                                } from cart`}
-                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[#8095A4] transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-2 focus-visible:outline-red-400"
-                            >
-                              <Trash2
-                                size={17}
-                                aria-hidden="true"
-                              />
-                            </button>
-                          </div>
-
-                          <p className="mt-3 text-[15px] font-bold text-[#17364E]">
-                            {product && !error
-                              ? formatPrice(unitPrice)
-                              : "Price unavailable"}
-
-                            {product && !error && (
-                              <span className="ml-1 text-[11px] font-normal text-[#8095A4]">
-                                / battery
-                              </span>
-                            )}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* QUANTITY AND SUBTOTAL */}
-                      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#DAE8F0] pt-4">
-
-                        <div className="inline-flex h-10 items-center rounded-xl border border-[#D5E5ED] bg-white/70 p-1">
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              changeQuantity(
-                                item,
-                                item.quantity - 1
-                              )
-                            }
-                            aria-label="Decrease quantity"
-                            className="flex h-8 w-9 items-center justify-center rounded-lg text-[#36566F] hover:bg-[#EAF5FB] focus-visible:outline-2 focus-visible:outline-[#398DB9]"
-                          >
-                            <Minus
-                              size={16}
-                              aria-hidden="true"
-                            />
-                          </button>
-
-                          <span className="min-w-8 text-center text-sm font-bold tabular-nums">
-                            {item.quantity}
-                          </span>
-
-                          <button
-                            type="button"
-                            disabled={maxReached}
-                            onClick={() =>
-                              changeQuantity(
-                                item,
-                                item.quantity + 1
-                              )
-                            }
-                            aria-label="Increase quantity"
-                            className="flex h-8 w-9 items-center justify-center rounded-lg text-[#36566F] hover:bg-[#EAF5FB] focus-visible:outline-2 focus-visible:outline-[#398DB9] disabled:cursor-not-allowed disabled:opacity-35"
-                          >
-                            <Plus
-                              size={16}
-                              aria-hidden="true"
-                            />
-                          </button>
-                        </div>
-
-                        <div className="text-right">
-                          <p className="text-[11px] text-[#8095A4]">
-                            Subtotal
-                          </p>
-
-                          <p className="text-[16px] font-extrabold tabular-nums text-[#17364E]">
-                            {product && !error
-                              ? formatPrice(subtotal)
-                              : "—"}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* PRODUCT WARNINGS */}
-                      {!product && !error && (
-                        <p
-                          className="mt-3 flex items-center gap-2 text-xs text-red-600"
-                          role="alert"
-                        >
-                          <AlertCircle size={15} />
-                          This product is no longer available.
-                          Remove it to continue.
-                        </p>
-                      )}
-
-                      {product &&
-                        !["Car", "Bike"].includes(
-                          product.category
-                        ) && (
-                          <p
-                            className="mt-3 flex items-center gap-2 text-xs text-red-600"
-                            role="alert"
-                          >
-                            <AlertCircle size={15} />
-                            This battery category is no longer
-                            sold. Remove it to continue.
-                          </p>
-                        )}
-
-                      {overStock && (
-                        <p
-                          className="mt-3 flex items-center gap-2 text-xs text-red-600"
-                          role="alert"
-                        >
-                          <AlertCircle size={15} />
-                          Only {product?.stock} in stock across
-                          both exchange options. Reduce the
-                          quantity.
-                        </p>
-                      )}
-                    </article>
-                  );
-                }
-              )}
+              {rows.map((row) => (
+                <CartItemCard
+                  key={`${row.item.productId}-${row.item.exchange}`}
+                  row={row}
+                  totalItems={totalItems}
+                  error={error}
+                  onChangeQuantity={changeQuantity}
+                  onRemove={removeItem}
+                />
+              ))}
             </div>
 
             {/* RIGHT: ORDER SUMMARY */}
-            <aside
-              className={`${glass} p-5 sm:p-6 lg:sticky lg:top-32`}
-            >
-              <h2 className="text-lg font-extrabold tracking-tight">
-                Order summary
-              </h2>
-
-              <p className="mt-1 text-xs text-[#7890A1]">
-                Prices include GST
-              </p>
-
-              <div className="mt-6 space-y-3 text-[13px]">
-
-                <div className="flex justify-between gap-4 text-[#607B8E]">
-                  <span>Items ({totalItems})</span>
-                  <span className="font-semibold text-[#294B63]">
-                    {!error && !missingProduct
-                      ? formatPrice(totalPaise)
-                      : "—"}
-                  </span>
-                </div>
-
-                <div className="flex justify-between gap-4 text-[#607B8E]">
-                  <span className="flex items-center gap-2">
-                    <Truck size={15} aria-hidden="true" />
-                    Delivery
-                  </span>
-
-                  <span className="font-semibold text-[#27965B]">
-                    FREE
-                  </span>
-                </div>
-
-                <div className="flex justify-between gap-4 text-[#607B8E]">
-                  <span className="flex items-center gap-2">
-                    <Wrench size={15} aria-hidden="true" />
-                    Installation
-                  </span>
-
-                  <span className="font-semibold text-[#27965B]">
-                    FREE
-                  </span>
-                </div>
-              </div>
-
-              {/* TOTAL */}
-              <div className="mt-5 border-t border-[#DBE8EF] pt-5">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-bold">
-                    Total
-                  </span>
-
-                  <strong className="text-[22px] font-extrabold tracking-tight tabular-nums">
-                    {!error && !missingProduct
-                      ? formatPrice(totalPaise)
-                      : "—"}
-                  </strong>
-                </div>
-              </div>
-
-              {/* VALIDATION MESSAGE */}
-              {(stockIssue ||
-                unsupportedCategory ||
-                quantityLimit ||
-                error) && (
-                  <p
-                    className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-xs leading-5 text-red-700"
-                    role="alert"
-                  >
-                    {error
-                      ? "We must verify prices and stock before checkout."
-                      : quantityLimit
-                        ? "Cart limit reached: maximum 10 per line and 30 batteries per order."
-                        : unsupportedCategory
-                          ? "Your cart contains a battery category we no longer sell. Please remove it."
-                          : "Some batteries are unavailable or exceed available stock. Please adjust your cart."}
-                  </p>
-                )}
-
-              {/* CHECKOUT BUTTON */}
-              {canCheckout ? (
-                <Link
-                  href="/checkout"
-                  className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#50C878] text-sm font-bold text-[#123E29] shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_4px_12px_rgba(47,151,92,0.14)] transition-colors hover:bg-[#43BA6D] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#268F54]"
-                >
-                  Proceed to checkout
-                  <ArrowRight
-                    size={17}
-                    aria-hidden="true"
-                  />
-                </Link>
-              ) : (
-                <button
-                  type="button"
-                  disabled
-                  className="mt-5 flex h-12 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-[#50C878]/45 text-sm font-bold text-[#517865]"
-                >
-                  Proceed to checkout
-                  <ArrowRight
-                    size={17}
-                    aria-hidden="true"
-                  />
-                </button>
-              )}
-
-              {/* EXCHANGE DISCLAIMER */}
-              <div className="mt-4 flex items-start gap-2 rounded-xl bg-[#EAF5FB]/75 p-3 text-[11px] leading-[18px] text-[#607B8E]">
-                <Check
-                  size={15}
-                  className="mt-0.5 shrink-0 text-[#2E9362]"
-                  aria-hidden="true"
-                />
-
-                <p>
-                  Exchange prices are subject to old-battery
-                  verification at delivery. If ineligible, the
-                  price difference is payable.
-                </p>
-              </div>
-            </aside>
+            <CartSummary
+              totalItems={totalItems}
+              totalPaise={totalPaise}
+              missingProduct={missingProduct}
+              stockIssue={stockIssue}
+              unsupportedCategory={unsupportedCategory}
+              quantityLimit={quantityLimit}
+              error={error}
+              canCheckout={canCheckout}
+            />
           </div>
         )}
       </div>

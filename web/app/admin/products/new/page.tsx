@@ -1,31 +1,11 @@
 
 import Link from "next/link";
-import { headers } from "next/headers";
-import { redirect, notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-import { auth } from "@/lib/auth";
+import { requireAdmin } from "@/lib/require-admin";
 import { db } from "@/db";
 import { products } from "@/db/schema";
-
-// Check admin permissions on the server
-async function requireAdmin() {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  if (!session) {
-    redirect("/admin/login");
-  }
-
-  const roles = session.user.role?.split(",") ?? [];
-
-  if (!roles.includes("admin")) {
-    notFound();
-  }
-
-  return session;
-}
 
 // Read text from our form
 function field(data: FormData, name: string) {
