@@ -8,118 +8,84 @@ import {
 } from "lucide-react";
 
 const benefits = [
-  {
-    label: "Free Doorstep Delivery",
-    icon: PackageCheck,
-  },
-  {
-    label: "Free Battery Installation",
-    icon: Wrench,
-  },
-  {
-    label: "Old Battery Exchange",
-    icon: Recycle,
-  },
-  {
-    label: "Car & Bike Batteries",
-    icon: CarFront,
-  },
-  {
-    label: "GST Inclusive Pricing",
-    icon: ReceiptText,
-  },
+  { label: "Free Doorstep Delivery", icon: PackageCheck },
+  { label: "Free Battery Installation", icon: Wrench },
+  { label: "Old Battery Exchange", icon: Recycle },
+  { label: "Car & Bike Batteries", icon: CarFront },
+  { label: "GST Inclusive Pricing", icon: ReceiptText },
 ];
 
 export function ServicesStrip() {
   return (
     <section
       aria-label="Our services and benefits"
-      className="relative z-10 mx-auto max-w-[1160px] px-5 pb-10 sm:px-8"
+      className="w-full overflow-hidden bg-[#36556C] py-4"
     >
-      <div className="overflow-hidden rounded-[18px] border border-white/85 bg-white/65 py-4 shadow-[0_10px_32px_rgba(32,72,102,0.07)] backdrop-blur-[18px]">
-
-        {/* SCROLLING VIEWPORT */}
-        <div className="pb-marquee-viewport w-full overflow-hidden">
-
-          {/* MOVING TRACK */}
-          <div className="pb-marquee-track flex w-max items-center">
-
-            {/* DUPLICATED GROUPS FOR SEAMLESS LOOP */}
-            {[0, 1].map((copy) => (
-              <div
-                key={copy}
-                aria-hidden={copy === 1}
-                className="pb-marquee-group flex shrink-0 items-center gap-8 pr-8"
-              >
-                {benefits.map(({ label, icon: Icon }) => (
-                  <div
-                    key={label}
-                    className="flex shrink-0 items-center gap-3 whitespace-nowrap"
-                  >
-                    {/* ICON */}
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-[#E8F7EE] text-[#29965E]">
-                      <Icon
-                        size={18}
-                        strokeWidth={1.8}
-                        aria-hidden="true"
-                      />
-                    </div>
-
-                    {/* TEXT */}
-                    <span className="text-[13px] font-semibold text-[#36556C]">
-                      {label}
-                    </span>
-
-                    {/* SEPARATOR */}
-                    <span
+      {/* Horizontal marquee */}
+      <div className="pb-marquee-viewport w-full overflow-hidden">
+        <div className="pb-marquee-track flex w-max items-center">
+          {[0, 1].map((copy) => (
+            <div
+              key={copy}
+              aria-hidden={copy === 1}
+              className="pb-marquee-group flex shrink-0 items-center gap-10 pr-10"
+            >
+              {benefits.map(({ label, icon: Icon }) => (
+                <div
+                  key={label}
+                  className="flex shrink-0 items-center gap-3 whitespace-nowrap"
+                >
+                  {/* Icon */}
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-white/10 text-[#50C878]">
+                    <Icon
+                      size={19}
+                      strokeWidth={1.9}
                       aria-hidden="true"
-                      className="ml-3 h-1.5 w-1.5 shrink-0 rounded-full bg-[#89CFF0]"
                     />
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
+                  </span>
+
+                  {/* Text */}
+                  <span className="text-[13px] font-semibold tracking-[-0.01em] text-white sm:text-[14px]">
+                    {label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* ANIMATION STYLES */}
       <style>{`
         .pb-marquee-viewport {
-          mask-image: linear-gradient(
-            to right,
-            transparent,
-            black 6%,
-            black 94%,
-            transparent
-          );
-
           -webkit-mask-image: linear-gradient(
             to right,
             transparent,
-            black 6%,
-            black 94%,
+            black 5%,
+            black 95%,
             transparent
           );
-        }
-
-        .pb-marquee-group {
-          min-width: 1140px;
+          mask-image: linear-gradient(
+            to right,
+            transparent,
+            black 5%,
+            black 95%,
+            transparent
+          );
         }
 
         .pb-marquee-track {
           display: flex;
           width: max-content;
-          animation: pb-marquee-scroll 30s linear infinite;
+          animation: pb-marquee-scroll 32s linear infinite;
           will-change: transform;
         }
 
         @keyframes pb-marquee-scroll {
-          0% {
+          from {
             transform: translate3d(0, 0, 0);
           }
 
-          100% {
+          to {
             transform: translate3d(-50%, 0, 0);
           }
         }
@@ -131,8 +97,8 @@ export function ServicesStrip() {
         @media (prefers-reduced-motion: reduce) {
           .pb-marquee-viewport {
             overflow-x: auto;
-            mask-image: none;
             -webkit-mask-image: none;
+            mask-image: none;
           }
 
           .pb-marquee-track {

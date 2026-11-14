@@ -1,14 +1,9 @@
-import type { RefObject } from "react";
-
 const roadMask =
   "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.06) 8%, rgba(0,0,0,.38) 18%, rgba(0,0,0,.82) 30%, black 42%)";
 
-export function HeroVisual({ visualRef }: { visualRef: RefObject<HTMLDivElement | null> }) {
+export function HeroVisual() {
   return (
-    <div
-      ref={visualRef}
-      className="absolute inset-0 will-change-[opacity]"
-    >
+    <div className="absolute inset-0">
       {/* ROAD IMAGE + TRANSPARENT TOP FADE */}
       <div
         aria-hidden="true"

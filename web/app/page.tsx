@@ -4,8 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { StorefrontNav } from "@/components/layout/storefront-nav";
 import { HeroSection } from "@/components/home/hero-section";
-import { ServicesStrip } from "@/components/home/services-strip";
-import { DeliverySection } from "@/components/home/delivery-section";
 import { ProductSection } from "@/components/home/product-section";
 import { useProducts } from "@/hooks/use-products";
 import { addToCart } from "@/lib/cart";
@@ -13,6 +11,7 @@ import type { FinderSelection } from "@/components/battery-finder/battery-finder
 import type { Product } from "@/types/product";
 import type { SelectedVehicle } from "@/types/vehicle";
 import { ManufacturerSection } from "@/components/home/manufacturer-section";
+import { BatteryBrandSection } from "@/components/home/battery-brand-section";
 
 export default function Home() {
   const { products, loading, error } = useProducts();
@@ -104,9 +103,25 @@ export default function Home() {
         onSearch={handleFinderSearch}
       />
 
-      <ServicesStrip />
-      <DeliverySection />
       <ManufacturerSection />
+
+      <BatteryBrandSection
+        onSelectBrand={(brand) => {
+          setSearch(brand);
+          setSelected("All");
+          setVehicle(null);
+
+          requestAnimationFrame(() => {
+            document
+              .getElementById("products")
+              ?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+              });
+          });
+        }}
+      />
+
       <ProductSection
         vehicle={vehicle}
         loading={loading}
