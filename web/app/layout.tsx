@@ -25,7 +25,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Mission Battery Beat",
+  title: "Car & Bike Batteries in Mumbai | Project Battery",
+  description:
+    "Buy car and bike batteries in Mumbai and Navi Mumbai. Free doorstep delivery, battery installation and old battery exchange.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

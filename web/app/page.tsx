@@ -1,28 +1,22 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
   BatteryCharging,
   BatteryFull,
-  CarFront,
   Bike,
-  Truck,
-  ShieldCheck,
+  CarFront,
   PackageCheck,
-  Wrench,
   Recycle,
-  Search,
-  ShoppingCart,
   RotateCcw,
-  Zap,
-  MapPin,
+  ShoppingCart,
+  Wrench,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import BatteryFinder from "@/components/battery-finder";
 import PincodeChecker from "@/components/pincode-checker";
 import StorefrontNav from "@/components/storefront-nav";
@@ -51,9 +45,13 @@ type SelectedVehicle = {
 const categories = [
   { name: "Car", icon: CarFront },
   { name: "Bike", icon: Bike },
-  { name: "Inverter", icon: BatteryCharging },
-  { name: "Truck", icon: Truck },
-];
+] as const;
+
+const glass =
+  "border border-white/85 bg-white/60 shadow-[0_10px_32px_rgba(32,72,102,0.07),inset_0_1px_0_rgba(255,255,255,0.8)] ring-1 ring-[#89CFF0]/10 backdrop-blur-[18px]";
+
+const roadMask =
+  "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.06) 8%, rgba(0,0,0,.38) 18%, rgba(0,0,0,.82) 30%, black 42%)";
 
 function formatPrice(paise: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -64,22 +62,103 @@ function formatPrice(paise: number) {
   }).format(paise / 100);
 }
 
-const glass =
-  "border border-white/90 bg-white/75 shadow-[0_12px_45px_rgba(234,88,12,0.07)] backdrop-blur-2xl";
-
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState("All");
+
   const [vehicle, setVehicle] =
     useState<SelectedVehicle | null>(null);
 
   const [finderKey, setFinderKey] = useState(0);
   const [cartMessage, setCartMessage] = useState("");
 
+  const heroSceneRef = useRef<HTMLElement>(null);
+  const heroPanelRef = useRef<HTMLDivElement>(null);
+  const heroVisualRef = useRef<HTMLDivElement>(null);
+
+  // SCROLL FADE
+  // Only the image, artwork and hero copy fade.
+  // The battery finder stays sharp and fully visible.
+  useEffect(() => {
+    let frame = 0;
+
+    const update = () => {
+      frame = 0;
+
+      const scene = heroSceneRef.current;
+      const panel = heroPanelRef.current;
+      const visual = heroVisualRef.current;
+
+      if (!scene || !panel || !visual) return;
+
+      const travel = Math.max(
+        1,
+        scene.offsetHeight - panel.offsetHeight
+      );
+
+      const scrolled = Math.max(
+        0,
+        -scene.getBoundingClientRect().top
+      );
+
+      // Start fading shortly after scrolling begins.
+      const start = Math.min(50, travel * 0.1);
+
+      // Finish while the finder is near viewport centre,
+      // before the sticky hero reaches its boundary.
+      const end = Math.max(
+        start + 100,
+        Math.min(
+          travel * 0.64,
+          window.innerHeight * 0.36
+        )
+      );
+
+      const progress = Math.max(
+        0,
+        Math.min(
+          1,
+          (scrolled - start) / (end - start)
+        )
+      );
+
+      // Smoothstep easing prevents a harsh transition.
+      const eased =
+        progress * progress * (3 - 2 * progress);
+
+      // Unlike the old 82% overlay,
+      // this reaches complete transparency.
+      visual.style.opacity = String(1 - eased);
+    };
+
+    const onScroll = () => {
+      if (!frame) {
+        frame = window.requestAnimationFrame(update);
+      }
+    };
+
+    window.addEventListener("scroll", onScroll, {
+      passive: true,
+    });
+
+    window.addEventListener("resize", onScroll);
+
+    update();
+
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+
+      if (frame) {
+        window.cancelAnimationFrame(frame);
+      }
+    };
+  }, []);
+
+  // LOAD PRODUCT DATA
   useEffect(() => {
     const controller = new AbortController();
 
@@ -122,24 +201,34 @@ export default function Home() {
     return () => controller.abort();
   }, []);
 
-  const filteredProducts = products.filter((product) => {
-    const matchesCategory =
-      selected === "All" || product.category === selected;
+  const sellableProducts = products.filter(
+    (product) =>
+      product.category === "Car" ||
+      product.category === "Bike"
+  );
 
-    const matchesSearch =
-      `${product.brand} ${product.model} ${product.category}`
-        .toLowerCase()
-        .includes(search.toLowerCase());
+  const filteredProducts = sellableProducts.filter(
+    (product) => {
+      const matchesCategory =
+        selected === "All" ||
+        product.category === selected;
 
-    const matchesVehicle =
-      !vehicle || product.category === vehicle.type;
+      const matchesBrand =
+        `${product.brand} ${product.model}`
+          .toLowerCase()
+          .includes(search.toLowerCase());
 
-    return (
-      matchesCategory &&
-      matchesSearch &&
-      matchesVehicle
-    );
-  });
+      const matchesVehicle =
+        !vehicle ||
+        vehicle.type === product.category;
+
+      return (
+        matchesCategory &&
+        matchesBrand &&
+        matchesVehicle
+      );
+    }
+  );
 
   function clearFilters() {
     setSearch("");
@@ -150,12 +239,13 @@ export default function Home() {
 
   function selectCategory(category: string) {
     setSelected(category);
+    setSearch("");
     setVehicle(null);
     setFinderKey((key) => key + 1);
 
-    document.getElementById("products")?.scrollIntoView({
-      behavior: "smooth",
-    });
+    document
+      .getElementById("products")
+      ?.scrollIntoView({ behavior: "smooth" });
   }
 
   function addBattery(
@@ -170,370 +260,286 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-[#FFF9F3] text-[#20202A]">
+    <main className="relative min-h-screen overflow-x-clip bg-[#F6FAFC] text-[#17364E]">
 
-      {/* FLOATING BOTTOM NAV */}
-      <StorefrontNav />
+      {/* PAGE BACKGROUND */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-[660px] overflow-hidden"
+      >
+        <div className="absolute -left-40 top-0 h-[420px] w-[420px] rounded-full bg-[#89CFF0]/25 blur-[110px]" />
 
-      {/* BACKGROUND */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[700px] overflow-hidden">
-        <div className="absolute -left-40 top-0 h-[400px] w-[400px] rounded-full bg-orange-200/50 blur-[110px]" />
-
-        <div className="absolute -right-32 top-28 h-[450px] w-[450px] rounded-full bg-orange-300/35 blur-[120px]" />
+        <div className="absolute -right-32 top-24 h-[350px] w-[350px] rounded-full bg-[#89CFF0]/10 blur-[110px]" />
       </div>
 
-      {/* TOP BRAND BAR */}
-      <header className="relative z-10 mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-7 sm:px-8">
-        <Link
-          href="/"
-          className="flex items-center gap-3"
+      <StorefrontNav />
+
+      {/* FULL-WIDTH STICKY HERO */}
+      <section
+        ref={heroSceneRef}
+        className="relative isolate z-10 w-full"
+      >
+        {/* STICKY BACKGROUND PANEL */}
+        <div
+          ref={heroPanelRef}
+          className="sticky top-0 z-0 h-[82svh] min-h-[min(470px,85svh)] max-h-[780px] w-full overflow-hidden"
         >
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-500/20">
-            <Zap size={25} fill="currentColor" />
-          </div>
-
-          <span className="font-heading text-lg font-extrabold tracking-tight sm:text-xl">
-            PROJECT<span className="text-orange-600">BATTERY</span>
-          </span>
-        </Link>
-
-        <div className="hidden items-center gap-2 rounded-full border border-white bg-white/75 px-5 py-3 text-sm font-medium text-slate-600 shadow-sm backdrop-blur-xl sm:flex">
-          <MapPin size={16} className="text-orange-600" />
-          Mumbai & Navi Mumbai
-        </div>
-
-        <Link
-          href="/cart"
-          className="flex h-11 w-11 items-center justify-center rounded-full border border-white bg-white/80 text-slate-800 shadow-sm backdrop-blur-xl transition hover:bg-orange-50 sm:hidden"
-          aria-label="Shopping cart"
-        >
-          <ShoppingCart size={21} />
-        </Link>
-      </header>
-
-      {/* HERO */}
-      <section className="relative z-10 mx-auto grid max-w-7xl items-center gap-10 px-5 pb-20 pt-12 sm:px-8 lg:grid-cols-2 lg:py-24">
-
-        {/* LEFT */}
-        <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-white/70 px-4 py-2 text-xs font-bold uppercase tracking-wider text-orange-600 backdrop-blur-xl">
-            <Zap size={15} fill="currentColor" />
-            Power delivered to your doorstep
-          </div>
-
-          <h1 className="mt-7 font-heading text-5xl font-extrabold leading-[1.08] tracking-tight sm:text-6xl lg:text-7xl">
-            Stay charged.
-            <span className="mt-1 block text-orange-500">
-              Keep moving.
-            </span>
-          </h1>
-
-          <p className="mt-7 max-w-lg text-base leading-relaxed text-slate-600 sm:text-lg">
-            Find the right battery for your car, bike,
-            inverter or truck. Enjoy free doorstep delivery,
-            installation and old battery exchange.
-          </p>
-
-          {/* GLASS SEARCH */}
-          <div className={`mt-9 flex max-w-xl items-center gap-3 rounded-[24px] p-3 ${glass}`}>
-            <Search
-              size={23}
-              className="ml-3 shrink-0 text-orange-500"
-            />
-
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search batteries..."
-              aria-label="Search batteries"
-              className="h-12 flex-1 border-0 bg-transparent shadow-none focus-visible:ring-0"
-            />
-
-            <a
-              href="#products"
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-orange-500 text-white transition hover:bg-orange-600"
-              aria-label="View search results"
+          {/* FADING VISUAL GROUP */}
+          <div
+            ref={heroVisualRef}
+            className="absolute inset-0 will-change-[opacity]"
+          >
+            {/* ROAD IMAGE + TRANSPARENT TOP FADE */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0"
+              style={{
+                WebkitMaskImage: roadMask,
+                maskImage: roadMask,
+              }}
             >
-              <ArrowRight size={22} />
-            </a>
-          </div>
-
-          {/* HERO BUTTONS */}
-          <div className="mt-7 flex flex-wrap gap-3">
-            <a
-              href="#battery-finder"
-              className="inline-flex items-center gap-2 rounded-full bg-orange-500 px-7 py-4 text-sm font-bold text-white shadow-lg shadow-orange-500/20 transition hover:-translate-y-1 hover:bg-orange-600"
-            >
-              Find My Battery
-              <ArrowRight size={18} />
-            </a>
-
-            <a
-              href="#products"
-              className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-white/75 px-7 py-4 text-sm font-bold text-slate-800 backdrop-blur-xl transition hover:-translate-y-1 hover:bg-white"
-            >
-              Explore Products
-            </a>
-          </div>
-
-          <div className="mt-8 flex flex-wrap items-center gap-4 text-sm text-slate-600">
-            <span className="flex items-center gap-2">
-              <ShieldCheck size={18} className="text-orange-500" />
-              Trusted battery brands
-            </span>
-
-            <span className="flex items-center gap-2">
-              <PackageCheck size={18} className="text-orange-500" />
-              Free installation
-            </span>
-          </div>
-        </div>
-
-        {/* RIGHT - FLOATING GLASS VISUAL */}
-        <div className="relative mx-auto flex min-h-[370px] w-full max-w-[520px] items-center justify-center sm:min-h-[480px]">
-          <div className="absolute h-[300px] w-[300px] rounded-full bg-orange-300/40 blur-[85px] sm:h-[400px] sm:w-[400px]" />
-
-          <div className={`relative flex h-[310px] w-[310px] flex-col items-center justify-center rounded-[55px] p-8 text-center sm:h-[390px] sm:w-[390px] ${glass}`}>
-            <div className="flex h-36 w-36 items-center justify-center rounded-[42px] border border-orange-200 bg-gradient-to-br from-orange-100 to-white shadow-inner sm:h-44 sm:w-44">
-              <BatteryFull
-                size={105}
-                strokeWidth={1.2}
-                className="text-orange-500"
+              <div
+                className="absolute inset-0 bg-cover bg-center"
+                style={{
+                  backgroundImage:
+                    "url('/images/hero-road.png')",
+                }}
               />
+
+              {/* DARK READABILITY GRADIENT */}
+              <div className="absolute inset-0 bg-gradient-to-r from-[#10283A]/90 via-[#17364E]/55 to-[#17364E]/15" />
+
+              {/* SUBTLE BOTTOM SHADING */}
+              <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[#10283A]/25 to-transparent" />
             </div>
 
-            <h2 className="mt-7 font-heading text-2xl font-extrabold">
-              Power for every journey
-            </h2>
+            {/* HERO TEXT */}
+            <div className="relative z-10 mx-auto flex h-full max-w-[1280px] items-center px-5 pb-14 pt-20 sm:px-8 sm:pb-20 sm:pt-24 lg:pb-24">
+              <div className="max-w-[660px]">
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#C6EAFA] sm:text-xs">
+                  Car &amp; bike batteries
+                </p>
 
-            <p className="mt-2 text-sm text-slate-500">
-              Batteries delivered. Hassle removed.
-            </p>
-          </div>
+                <h1 className="mt-4 font-heading text-[clamp(2rem,5vw,4.8rem)] font-extrabold leading-[1.03] tracking-[-0.05em] text-white">
+                  Reliable batteries.
 
-          <div className="absolute -left-1 top-12 flex items-center gap-2 rounded-2xl border border-white bg-white/85 px-4 py-3 text-sm font-semibold shadow-xl shadow-orange-500/10 backdrop-blur-2xl sm:-left-5">
-            <span className="rounded-xl bg-orange-100 p-2 text-orange-500">
-              <Wrench size={19} />
-            </span>
-            Free Installation
-          </div>
+                  <span className="mt-2 block text-[#DCF5FF]">
+                    Delivered &amp; installed.
+                  </span>
+                </h1>
 
-          <div className="absolute -right-1 bottom-9 flex items-center gap-2 rounded-2xl border border-white bg-white/85 px-4 py-3 text-sm font-semibold shadow-xl shadow-orange-500/10 backdrop-blur-2xl sm:-right-5">
-            <span className="rounded-xl bg-orange-100 p-2 text-orange-500">
-              <Recycle size={19} />
-            </span>
-            Battery Exchange
+                <p className="mt-5 max-w-[570px] text-[14px] leading-6 text-white/90 sm:text-[16px] sm:leading-7">
+                  Shop genuine car and bike batteries in
+                  Mumbai and Navi Mumbai. Free doorstep
+                  delivery, installation and old battery
+                  exchange.
+                </p>
+              </div>
+            </div>
+
+            {/* BATTERY PRODUCT ARTWORK */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute bottom-[12%] right-[4%] z-10 hidden h-[52%] w-[38%] bg-contain bg-bottom bg-no-repeat lg:block"
+              style={{
+                backgroundImage:
+                  "url('/images/hero-batteries.png')",
+              }}
+            />
           </div>
         </div>
+
+        {/* BATTERY FINDER SCROLLS OVER HERO */}
+        <div className="relative z-20 mx-auto -mt-14 w-[calc(100%-24px)] max-w-[1140px] sm:-mt-20 sm:w-[calc(100%-48px)]">
+          <BatteryFinder
+            key={finderKey}
+            availableBrands={[
+              ...new Set(
+                sellableProducts.map(
+                  (product) => product.brand
+                )
+              ),
+            ].sort()}
+            onSearch={(selection) => {
+              setSelected(selection.type);
+              setSearch(selection.batteryBrand);
+
+              setVehicle({
+                type: selection.type,
+                name: [
+                  selection.brand,
+                  selection.model,
+                  selection.variant,
+                ]
+                  .filter(Boolean)
+                  .join(" "),
+              });
+
+              document
+                .getElementById("products")
+                ?.scrollIntoView({
+                  behavior: "smooth",
+                });
+            }}
+          />
+        </div>
+
+        {/* TRANSPARENT SCROLL RUNWAY */}
+        {/* Allows the image to fully fade before unsticking */}
+        <div
+          aria-hidden="true"
+          className="h-[clamp(110px,16svh,190px)]"
+        />
       </section>
 
       {/* SERVICES STRIP */}
-      <section
-        id="services"
-        className="relative z-10 mx-auto max-w-7xl px-5 sm:px-8"
-      >
-        <div className={`grid gap-4 rounded-[32px] p-6 md:grid-cols-3 md:gap-6 ${glass}`}>
+      <section className="relative z-10 mx-auto max-w-[1160px] px-5 pb-10 sm:px-8">
+        <div
+          className={`grid gap-2 rounded-[18px] p-3 sm:grid-cols-3 ${glass}`}
+        >
           {[
             {
-              title: "Free Delivery",
-              description: "At your doorstep",
+              title: "Free delivery",
               icon: PackageCheck,
             },
             {
-              title: "Free Installation",
-              description: "No extra service charge",
+              title: "Free installation",
               icon: Wrench,
             },
             {
-              title: "Old Battery Exchange",
-              description: "Save on your new battery",
+              title: "Old battery exchange",
               icon: Recycle,
             },
-          ].map((service) => {
-            const Icon = service.icon;
-
-            return (
-              <div
-                key={service.title}
-                className="flex items-center gap-4 rounded-2xl bg-orange-50/60 p-4"
-              >
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white text-orange-500 shadow-sm">
-                  <Icon size={27} />
-                </div>
-
-                <div>
-                  <h3 className="font-bold">{service.title}</h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {service.description}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
+          ].map(({ title, icon: Icon }) => (
+            <div
+              key={title}
+              className="flex items-center gap-2 rounded-xl px-3 py-2 text-[13px] font-semibold text-[#36556C]"
+            >
+              <Icon
+                aria-hidden="true"
+                size={18}
+                className="text-[#309A64]"
+              />
+              {title}
+            </div>
+          ))}
         </div>
       </section>
 
-      {/* DELIVERY PIN CHECKER */}
-      <section className="mx-auto max-w-7xl px-5 py-16 sm:px-8">
-        <div className={`overflow-hidden rounded-[32px] p-4 sm:p-6 ${glass}`}>
+      {/* DELIVERY PIN CODE CHECKER */}
+      <section className="mx-auto max-w-[1160px] px-5 pb-16 sm:px-8">
+        <div
+          className={`rounded-[20px] p-4 sm:p-6 ${glass}`}
+        >
           <PincodeChecker />
-        </div>
-      </section>
-
-      {/* BATTERY FINDER */}
-      <section
-        id="battery-finder"
-        className="mx-auto max-w-7xl scroll-mt-12 px-5 pb-20 sm:px-8"
-      >
-        <div className="mb-7">
-          <p className="text-sm font-bold uppercase tracking-widest text-orange-500">
-            Find your fit
-          </p>
-
-          <h2 className="mt-3 font-heading text-3xl font-extrabold sm:text-4xl">
-            Find the right battery.
-          </h2>
-
-          <p className="mt-3 text-slate-500">
-            Choose your vehicle to narrow down your options.
-          </p>
-        </div>
-
-        <div className={`overflow-hidden rounded-[32px] p-3 sm:p-6 ${glass}`}>
-          <BatteryFinder
-            key={finderKey}
-            onSearch={(selectedVehicle) => {
-              setSearch("");
-              setSelected("All");
-
-              setVehicle({
-                type: selectedVehicle.type,
-                name: `${selectedVehicle.brand} ${selectedVehicle.model} ${selectedVehicle.variant}`,
-              });
-
-              document.getElementById("products")?.scrollIntoView({
-                behavior: "smooth",
-              });
-            }}
-          />
         </div>
       </section>
 
       {/* CATEGORIES */}
       <section
         id="categories"
-        className="mx-auto max-w-7xl scroll-mt-12 px-5 pb-20 sm:px-8"
+        className="mx-auto max-w-[1160px] scroll-mt-32 px-5 pb-16 sm:px-8"
       >
-        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-sm font-bold uppercase tracking-widest text-orange-500">
-              Explore categories
-            </p>
+        <h2 className="font-heading text-2xl font-extrabold tracking-tight sm:text-3xl">
+          Shop by category
+        </h2>
 
-            <h2 className="mt-3 font-heading text-3xl font-extrabold sm:text-4xl">
-              Shop by Category
-            </h2>
-          </div>
+        <p className="mt-2 text-sm text-[#688092]">
+          Choose your vehicle type.
+        </p>
 
-          <p className="text-sm text-slate-500">
-            Pick what you're powering.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          {categories.map((category) => {
-            const Icon = category.icon;
-            const active = selected === category.name;
-
-            return (
-              <button
-                type="button"
-                key={category.name}
-                onClick={() => selectCategory(category.name)}
-                className={`group rounded-[28px] p-6 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl ${
-                  active
-                    ? "border border-orange-300 bg-orange-100/90 shadow-lg"
-                    : glass
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:max-w-[600px] sm:gap-4">
+          {categories.map(({ name, icon: Icon }) => (
+            <button
+              key={name}
+              type="button"
+              onClick={() => selectCategory(name)}
+              className={`group flex items-center gap-3 rounded-[18px] p-4 text-left transition-colors focus-visible:outline-2 focus-visible:outline-[#398DB9] sm:p-5 ${selected === name
+                  ? "border border-[#89CFF0] bg-[#DDF2FC]/80 shadow-sm"
+                  : `${glass} hover:border-[#89CFF0]`
                 }`}
-              >
-                <div className="flex h-16 w-16 items-center justify-center rounded-[22px] bg-orange-50 text-orange-500 transition group-hover:bg-orange-500 group-hover:text-white">
-                  <Icon size={34} strokeWidth={1.6} />
-                </div>
+            >
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#E2F3FB] text-[#367EA5] sm:h-12 sm:w-12">
+                <Icon
+                  size={24}
+                  strokeWidth={1.7}
+                />
+              </span>
 
-                <h3 className="mt-7 font-heading text-xl font-bold">
-                  {category.name}
-                </h3>
+              <span className="text-sm font-bold text-[#274B64] sm:text-base">
+                {name} batteries
+              </span>
 
-                <p className="mt-1 text-sm text-slate-500">
-                  Batteries
-                </p>
-
-                <div className="mt-5 flex justify-end text-orange-500">
-                  <ArrowRight size={22} />
-                </div>
-              </button>
-            );
-          })}
+              <ArrowRight
+                size={17}
+                className="ml-auto hidden text-[#398DB9] sm:block"
+              />
+            </button>
+          ))}
         </div>
       </section>
 
-      {/* PRODUCT SECTION */}
+      {/* PRODUCT CATALOG */}
       <section
         id="products"
-        className="mx-auto max-w-7xl scroll-mt-12 px-5 pb-24 sm:px-8"
+        className="mx-auto max-w-[1160px] scroll-mt-32 px-5 pb-20 sm:px-8"
       >
-        <div className="flex flex-wrap items-end justify-between gap-5">
+        <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-sm font-bold uppercase tracking-widest text-orange-500">
-              Explore our collection
-            </p>
-
-            <h2 className="mt-3 font-heading text-3xl font-extrabold sm:text-4xl">
-              Discover Batteries
+            <h2 className="font-heading text-2xl font-extrabold tracking-tight sm:text-3xl">
+              Explore batteries
             </h2>
 
-            <p className="mt-3 text-sm text-slate-500">
-              Prices include GST. Free delivery and installation.
+            <p className="mt-2 text-sm text-[#688092]">
+              GST included. Free delivery and installation.
             </p>
           </div>
 
           <Button
             variant="outline"
             onClick={clearFilters}
-            className="rounded-full border-orange-200 bg-white/80 px-5"
+            className="rounded-xl border-[#C8DEEB] bg-white/75 text-[#36556C] hover:bg-[#E8F5FC]"
           >
-            <RotateCcw size={16} className="mr-2" />
-            Clear Filters
+            <RotateCcw
+              size={15}
+              className="mr-2"
+            />
+            Clear filters
           </Button>
         </div>
 
         {vehicle && (
-          <div className="mt-6 rounded-2xl border border-orange-200 bg-orange-50 p-5">
-            <p className="font-semibold text-orange-900">
-              Selected: {vehicle.name}
+          <div className="mt-5 rounded-[14px] border border-[#C7E4F1] bg-[#EAF6FC]/80 px-4 py-3">
+            <p className="text-sm font-semibold text-[#244C68]">
+              Browsing {vehicle.type} batteries for{" "}
+              {vehicle.name}
             </p>
 
-            <p className="mt-1 text-sm text-orange-700">
-              Showing {vehicle.type} batteries.
-              Exact vehicle compatibility is not yet verified.
+            <p className="mt-1 text-xs text-[#5F798B]">
+              Exact vehicle compatibility has not yet
+              been verified.
             </p>
           </div>
         )}
 
         {loading && (
-          <p className="mt-10 text-center text-slate-500">
+          <p className="mt-8 text-sm text-[#688092]">
             Loading batteries...
           </p>
         )}
 
         {error && !loading && (
-          <div className="mt-8 rounded-2xl border border-red-200 bg-red-50 p-6">
-            <p className="text-red-700">{error}</p>
+          <div className="mt-8 rounded-[18px] border border-red-200 bg-red-50 p-5">
+            <p className="text-sm text-red-700">
+              {error}
+            </p>
 
             <Button
               variant="outline"
-              className="mt-4"
-              onClick={() => window.location.reload()}
+              className="mt-3"
+              onClick={() =>
+                window.location.reload()
+              }
             >
               Retry
             </Button>
@@ -542,91 +548,95 @@ export default function Home() {
 
         {!loading && !error && (
           <>
-            <p className="mt-6 text-sm text-slate-500">
+            <p className="mt-5 text-xs text-[#688092]">
               {filteredProducts.length} batteries found
             </p>
 
-            <div className="mt-7 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {filteredProducts.map((product) => (
                 <article
                   key={product.id}
-                  className={`group overflow-hidden rounded-[30px] p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${glass}`}
+                  className={`overflow-hidden rounded-[20px] p-4 ${glass}`}
                 >
                   {/* PRODUCT VISUAL */}
-                  <div className="relative flex h-48 items-center justify-center rounded-[24px] bg-gradient-to-br from-orange-50 to-white">
+                  <div className="relative flex h-36 items-center justify-center rounded-[14px] bg-[#EAF5FB]/80">
                     <BatteryFull
-                      size={95}
+                      size={78}
                       strokeWidth={1.2}
-                      className="text-orange-400 transition-transform duration-300 group-hover:scale-110"
+                      className="text-[#3F98C6]"
+                      aria-hidden="true"
                     />
 
-                    <span className="absolute left-4 top-4 rounded-full border border-white bg-white/85 px-3 py-1.5 text-xs font-bold text-orange-600 shadow-sm backdrop-blur-lg">
+                    <span className="absolute left-3 top-3 rounded-lg bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-[#306B8F]">
                       {product.brand}
                     </span>
 
                     <span
-                      className={`absolute right-4 top-4 rounded-full px-3 py-1.5 text-xs font-bold ${
-                        product.stock > 0
-                          ? "bg-green-50 text-green-700"
+                      className={`absolute right-3 top-3 rounded-lg px-2.5 py-1 text-[11px] font-bold ${product.stock > 0
+                          ? "bg-[#E4F8EB] text-[#267B4B]"
                           : "bg-red-50 text-red-600"
-                      }`}
+                        }`}
                     >
                       {product.stock > 0
-                        ? "In Stock"
-                        : "Out of Stock"}
+                        ? "In stock"
+                        : "Out of stock"}
                     </span>
                   </div>
 
-                  {/* PRODUCT INFO */}
-                  <div className="pt-5">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-orange-500">
-                      {product.category} Battery
+                  {/* PRODUCT DETAILS */}
+                  <div className="pt-4">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-[#438AAD]">
+                      {product.category} battery
                     </p>
 
-                    <h3 className="mt-2 font-heading text-xl font-extrabold">
+                    <h3 className="mt-1 text-lg font-extrabold text-[#193B54]">
                       {product.brand} {product.model}
                     </h3>
 
-                    <div className="mt-3 flex flex-wrap gap-2">
+                    <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-[#597487]">
                       {product.capacityAh !== null && (
-                        <span className="rounded-full bg-orange-50 px-3 py-1 text-xs text-slate-600">
+                        <span className="rounded-md bg-[#E9F5FB] px-2.5 py-1">
                           {product.capacityAh} Ah
                         </span>
                       )}
 
                       {product.warrantyMonths !== null && (
-                        <span className="rounded-full bg-orange-50 px-3 py-1 text-xs text-slate-600">
-                          {product.warrantyMonths} Months Warranty
+                        <span className="rounded-md bg-[#E9F5FB] px-2.5 py-1">
+                          {product.warrantyMonths} months warranty
                         </span>
                       )}
                     </div>
 
                     {/* PRICING */}
-                    <div className="mt-6 border-t border-orange-100 pt-5">
-                      <p className="text-sm text-slate-400">
+                    <div className="mt-4 border-t border-[#DCEBF2] pt-3">
+                      <p className="text-xs text-[#8297A6]">
                         MRP{" "}
-                        <s>{formatPrice(product.mrpPaise)}</s>
+                        <s>
+                          {formatPrice(
+                            product.mrpPaise
+                          )}
+                        </s>
                       </p>
 
-                      <div className="mt-4 grid grid-cols-2 gap-3">
-                        <div className="rounded-2xl bg-white/85 p-3">
-                          <p className="text-xs text-slate-500">
-                            Without Exchange
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <div className="rounded-xl bg-white/80 p-3">
+                          <p className="text-[11px] text-[#647D8F]">
+                            Without exchange
                           </p>
 
-                          <p className="mt-2 text-base font-bold">
+                          <p className="mt-1 text-sm font-bold text-[#25475F]">
                             {formatPrice(
                               product.withoutExchangePaise
                             )}
                           </p>
                         </div>
 
-                        <div className="rounded-2xl bg-orange-50 p-3">
-                          <p className="text-xs text-orange-700">
-                            With Exchange
+                        <div className="rounded-xl bg-[#E4F7EC] p-3">
+                          <p className="text-[11px] text-[#388259]">
+                            With exchange
                           </p>
 
-                          <p className="mt-2 text-base font-extrabold text-orange-600">
+                          <p className="mt-1 text-sm font-extrabold text-[#207548]">
                             {formatPrice(
                               product.withExchangePaise
                             )}
@@ -634,43 +644,50 @@ export default function Home() {
                         </div>
                       </div>
 
-                      <p className="mt-3 text-xs font-semibold text-orange-600">
+                      <p className="mt-2 text-xs text-[#478164]">
                         Save{" "}
                         {formatPrice(
                           product.withoutExchangePaise -
                           product.withExchangePaise
                         )}{" "}
-                        with old battery exchange
+                        with exchange
                       </p>
                     </div>
 
-                    {/* CART ACTIONS */}
-                    <div className="mt-6 space-y-2">
+                    {/* CART BUTTONS */}
+                    <div className="mt-4 space-y-2">
                       <Button
                         disabled={product.stock <= 0}
                         onClick={() =>
                           addBattery(product, "with")
                         }
-                        className="h-12 w-full rounded-2xl bg-orange-500 font-bold text-white hover:bg-orange-600"
+                        className="h-10 w-full rounded-xl bg-[#50C878] font-bold text-[#123E29] hover:bg-[#43B96D]"
                       >
-                        <ShoppingCart size={17} className="mr-2" />
-                        Add With Exchange
+                        <ShoppingCart
+                          size={16}
+                          className="mr-2"
+                        />
+                        Add with exchange
                       </Button>
 
                       <Button
                         disabled={product.stock <= 0}
                         onClick={() =>
-                          addBattery(product, "without")
+                          addBattery(
+                            product,
+                            "without"
+                          )
                         }
                         variant="outline"
-                        className="h-12 w-full rounded-2xl border-orange-200 bg-white/80 font-semibold hover:bg-orange-50"
+                        className="h-10 w-full rounded-xl border-[#C6DDE9] bg-white/75 font-semibold text-[#24445C] hover:bg-[#E9F5FB]"
                       >
-                        Add Without Exchange
+                        Add without exchange
                       </Button>
                     </div>
 
-                    <p className="mt-3 text-center text-xs text-slate-400">
-                      GST included · Exchange verified at delivery
+                    <p className="mt-2 text-center text-[11px] text-[#7C91A0]">
+                      GST included · Exchange verified
+                      at delivery
                     </p>
                   </div>
                 </article>
@@ -678,25 +695,27 @@ export default function Home() {
             </div>
 
             {filteredProducts.length === 0 && (
-              <div className={`mt-8 rounded-[28px] p-10 text-center ${glass}`}>
+              <div
+                className={`mt-6 rounded-[18px] p-8 text-center ${glass}`}
+              >
                 <BatteryCharging
-                  size={42}
-                  className="mx-auto text-orange-400"
+                  size={36}
+                  className="mx-auto text-[#398DB9]"
                 />
 
-                <h3 className="mt-4 font-heading text-xl font-bold">
+                <h3 className="mt-3 text-lg font-bold">
                   No batteries found
                 </h3>
 
-                <p className="mt-2 text-slate-500">
-                  Try another category or search.
+                <p className="mt-2 text-sm text-[#688092]">
+                  Try another category or brand.
                 </p>
 
                 <Button
                   onClick={clearFilters}
-                  className="mt-5 rounded-full bg-orange-500 hover:bg-orange-600"
+                  className="mt-4 rounded-xl bg-[#89CFF0] text-[#17364E] hover:bg-[#71C4EC]"
                 >
-                  Show All Batteries
+                  Show all batteries
                 </Button>
               </div>
             )}
@@ -708,24 +727,24 @@ export default function Home() {
       {cartMessage && (
         <div
           role="status"
-          className="fixed bottom-36 left-1/2 z-[60] w-[calc(100%-32px)] max-w-sm -translate-x-1/2 rounded-2xl border border-orange-200 bg-white/95 p-4 text-center shadow-2xl backdrop-blur-xl"
+          className="fixed bottom-6 left-1/2 z-[60] w-[calc(100%-32px)] max-w-sm -translate-x-1/2 rounded-[18px] border border-[#C5DFEB] bg-white/90 p-4 text-center shadow-xl backdrop-blur-xl"
         >
-          <p className="text-sm font-semibold text-slate-800">
+          <p className="text-sm font-semibold text-[#25475F]">
             {cartMessage}
           </p>
 
           <div className="mt-3 flex items-center justify-center gap-4">
             <Link
               href="/cart"
-              className="text-sm font-bold text-orange-600 underline"
+              className="text-sm font-bold text-[#287FAF] underline"
             >
-              View Cart
+              View cart
             </Link>
 
             <button
               type="button"
               onClick={() => setCartMessage("")}
-              className="text-sm text-slate-500"
+              className="text-sm text-[#647D8F]"
             >
               Dismiss
             </button>
@@ -734,17 +753,17 @@ export default function Home() {
       )}
 
       {/* FOOTER */}
-      <footer className="border-t border-orange-100 bg-white/70 px-6 pb-40 pt-12 text-center backdrop-blur-xl">
-        <h2 className="font-heading text-xl font-extrabold">
-          PROJECT<span className="text-orange-500">BATTERY</span>
+      <footer className="border-t border-[#E1EDF3] bg-white/50 px-5 py-10 text-center backdrop-blur-xl">
+        <h2 className="text-lg font-extrabold tracking-tight text-[#243F56]">
+          PROJECT
+          <span className="text-[#4C9FC9]">
+            BATTERY
+          </span>
         </h2>
 
-        <p className="mt-3 text-sm text-slate-500">
-          Powering Mumbai & Navi Mumbai.
-        </p>
-
-        <p className="mt-6 text-xs text-slate-400">
-          Development Preview
+        <p className="mt-2 text-xs text-[#6E8494]">
+          Car &amp; bike batteries · Mumbai &amp;
+          Navi Mumbai
         </p>
       </footer>
     </main>

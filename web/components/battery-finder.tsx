@@ -1,24 +1,24 @@
-
 "use client";
 
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { useMemo, useState, type FormEvent } from "react";
+import { ArrowRight, Bike, CarFront, ChevronDown } from "lucide-react";
 
-type VehicleType = "Car" | "Bike";
-
-type VehicleSelection = {
-  type: VehicleType;
+export type FinderSelection = {
+  type: "Car" | "Bike";
   brand: string;
   model: string;
   variant: string;
+  batteryBrand: string;
 };
 
-type BatteryFinderProps = {
-  onSearch: (vehicle: VehicleSelection) => void;
+type Props = {
+  onSearch: (selection: FinderSelection) => void;
+  availableBrands?: string[];
 };
 
-// Demo vehicle list - not verified compatibility data
-const vehicles = [
+type VehicleType = "Car" | "Bike";
+
+const demoVehicles = [
   { type: "Car", brand: "Hyundai", model: "i20", variant: "Petrol" },
   { type: "Car", brand: "Hyundai", model: "i20", variant: "Diesel" },
   { type: "Car", brand: "Hyundai", model: "Creta", variant: "Petrol" },
@@ -27,207 +27,241 @@ const vehicles = [
   { type: "Bike", brand: "Honda", model: "Activa", variant: "110" },
   { type: "Bike", brand: "Honda", model: "Activa", variant: "125" },
   { type: "Bike", brand: "Hero", model: "Splendor", variant: "Plus" },
-] satisfies VehicleSelection[];
+] as const;
+
+function SelectField({
+  id,
+  label,
+  value,
+  options,
+  placeholder,
+  onChange,
+  disabled = false,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  options: string[];
+  placeholder: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="min-w-0">
+      <label
+        htmlFor={id}
+        className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.05em] text-[#647A8C]"
+      >
+        {label}
+      </label>
+
+      <div className="relative">
+        <select
+          id={id}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          disabled={disabled}
+          className="h-11 w-full appearance-none rounded-[12px] border border-[#D4E2EA] bg-white/90 px-3 pr-9 text-[13px] text-[#1D3A52] outline-none transition-colors focus:border-[#50C878] focus:ring-2 focus:ring-[#50C878]/20 disabled:cursor-not-allowed disabled:bg-[#F3F7FA] disabled:text-[#98A9B5]"
+        >
+          <option value="">{placeholder}</option>
+          {options.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+
+        <ChevronDown
+          aria-hidden="true"
+          size={16}
+          className="pointer-events-none absolute right-3 top-3 text-[#61788A]"
+        />
+      </div>
+    </div>
+  );
+}
 
 export default function BatteryFinder({
   onSearch,
-}: BatteryFinderProps) {
-
+  availableBrands = [],
+}: Props) {
   const [type, setType] = useState<VehicleType>("Car");
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
   const [variant, setVariant] = useState("");
+  const [batteryBrand, setBatteryBrand] = useState("");
 
-  // Available manufacturers
-  const brands = [
-    ...new Set(
-      vehicles
-        .filter((vehicle) => vehicle.type === type)
-        .map((vehicle) => vehicle.brand)
-    ),
-  ];
+  const manufacturers = useMemo(
+    () => [
+      ...new Set(
+        demoVehicles
+          .filter((vehicle) => vehicle.type === type)
+          .map((vehicle) => vehicle.brand)
+      ),
+    ],
+    [type]
+  );
 
-  // Available models
-  const models = [
-    ...new Set(
-      vehicles
-        .filter(
-          (vehicle) =>
-            vehicle.type === type &&
-            vehicle.brand === brand
-        )
-        .map((vehicle) => vehicle.model)
-    ),
-  ];
+  const models = useMemo(
+    () => [
+      ...new Set(
+        demoVehicles
+          .filter(
+            (vehicle) =>
+              vehicle.type === type && vehicle.brand === brand
+          )
+          .map((vehicle) => vehicle.model)
+      ),
+    ],
+    [type, brand]
+  );
 
-  // Available variants
-  const variants = [
-    ...new Set(
-      vehicles
-        .filter(
-          (vehicle) =>
-            vehicle.type === type &&
-            vehicle.brand === brand &&
-            vehicle.model === model
-        )
-        .map((vehicle) => vehicle.variant)
-    ),
-  ];
+  const variants = useMemo(
+    () => [
+      ...new Set(
+        demoVehicles
+          .filter(
+            (vehicle) =>
+              vehicle.type === type &&
+              vehicle.brand === brand &&
+              vehicle.model === model
+          )
+          .map((vehicle) => vehicle.variant)
+      ),
+    ],
+    [type, brand, model]
+  );
 
-  const selectClass =
-    "w-full rounded-lg border border-slate-300 bg-white p-3 text-slate-900 disabled:opacity-50";
+  const canSearch = Boolean(brand && model && variant);
 
-  function handleSearch() {
-    if (!brand || !model || !variant) return;
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canSearch) return;
 
     onSearch({
       type,
       brand,
       model,
       variant,
+      batteryBrand,
     });
   }
 
   return (
-    <section className="mx-auto max-w-7xl px-6 py-12">
+    <section
+      id="battery-finder"
+      aria-labelledby="finder-title"
+      className="scroll-mt-28 rounded-[26px] border border-white/90 bg-white/85 p-4 shadow-[0_18px_50px_rgba(21,57,84,0.12),inset_0_1px_0_rgba(255,255,255,0.95)] ring-1 ring-[#89CFF0]/12 backdrop-blur-[18px] sm:p-5 lg:p-6"
+    >
+      <div className="flex flex-col gap-4 border-b border-[#DCE9F0] pb-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h2
+            id="finder-title"
+            className="text-[24px] font-extrabold tracking-tight text-[#17364E]"
+          >
+            Find your battery
+          </h2>
 
-      <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <p className="mt-1 text-sm text-[#647B8D]">
+            Select your vehicle details to browse batteries.
+          </p>
+        </div>
 
-        <h2 className="text-2xl font-bold text-slate-900">
-          Find Your Battery
-        </h2>
-
-        <p className="mt-2 text-sm text-slate-500">
-          Select your vehicle to explore batteries.
-        </p>
-
-        {/* Vehicle Type */}
-        <div className="mt-6 flex gap-3">
-
-          {(["Car", "Bike"] as VehicleType[]).map((item) => (
-            <Button
-              key={item}
-              variant={type === item ? "default" : "outline"}
+        <div
+          className="grid grid-cols-2 gap-2 rounded-[14px] bg-[#EEF4F7] p-1"
+          role="group"
+          aria-label="Vehicle type"
+        >
+          {(
+            [
+              { label: "Car", icon: CarFront },
+              { label: "Bike", icon: Bike },
+            ] as const
+          ).map(({ label, icon: Icon }) => (
+            <button
+              key={label}
+              type="button"
+              aria-pressed={type === label}
               onClick={() => {
-                setType(item);
+                setType(label);
                 setBrand("");
                 setModel("");
                 setVariant("");
               }}
+              className={`flex h-11 min-w-[120px] items-center justify-center gap-2 rounded-[12px] px-4 text-[13px] font-semibold transition-colors ${
+                type === label
+                  ? "bg-[#50C878] text-[#123E29] shadow-[inset_0_1px_0_rgba(255,255,255,0.4)]"
+                  : "text-[#566C7D] hover:bg-white/80"
+              }`}
             >
-              {item === "Car" ? "🚗 Car" : "🏍️ Bike"}
-            </Button>
+              <Icon size={17} aria-hidden="true" />
+              {label}
+            </button>
           ))}
-
         </div>
-
-        {/* Vehicle Selection */}
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
-
-          {/* Manufacturer */}
-          <div>
-            <label
-              htmlFor="vehicle-brand"
-              className="mb-2 block text-sm font-medium text-slate-900"
-            >
-              Manufacturer
-            </label>
-
-            <select
-              id="vehicle-brand"
-              className={selectClass}
-              value={brand}
-              onChange={(event) => {
-                setBrand(event.target.value);
-                setModel("");
-                setVariant("");
-              }}
-            >
-              <option value="">Select manufacturer</option>
-
-              {brands.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Model */}
-          <div>
-            <label
-              htmlFor="vehicle-model"
-              className="mb-2 block text-sm font-medium text-slate-900"
-            >
-              Model
-            </label>
-
-            <select
-              id="vehicle-model"
-              className={selectClass}
-              value={model}
-              disabled={!brand}
-              onChange={(event) => {
-                setModel(event.target.value);
-                setVariant("");
-              }}
-            >
-              <option value="">Select model</option>
-
-              {models.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Variant */}
-          <div>
-            <label
-              htmlFor="vehicle-variant"
-              className="mb-2 block text-sm font-medium text-slate-900"
-            >
-              Variant
-            </label>
-
-            <select
-              id="vehicle-variant"
-              className={selectClass}
-              value={variant}
-              disabled={!model}
-              onChange={(event) => {
-                setVariant(event.target.value);
-              }}
-            >
-              <option value="">Select variant</option>
-
-              {variants.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </div>
-
-        </div>
-
-        {/* Search Button */}
-        <Button
-          className="mt-6 w-full md:w-auto"
-          disabled={!brand || !model || !variant}
-          onClick={handleSearch}
-        >
-          Search Batteries →
-        </Button>
-
-        <p className="mt-4 text-xs text-slate-500">
-          Demo vehicle data. Exact battery compatibility
-          will be verified when we build our product database.
-        </p>
-
       </div>
 
+      <form onSubmit={handleSubmit} className="mt-4">
+        <div className="grid gap-3 lg:grid-cols-[1.15fr_1fr_1fr_1fr_auto] lg:items-end">
+          <SelectField
+            id="finder-manufacturer"
+            label="Manufacturer"
+            value={brand}
+            options={manufacturers}
+            placeholder="Select manufacturer"
+            onChange={(next) => {
+              setBrand(next);
+              setModel("");
+              setVariant("");
+            }}
+          />
+
+          <SelectField
+            id="finder-model"
+            label="Model"
+            value={model}
+            options={models}
+            placeholder="Select model"
+            disabled={!brand}
+            onChange={(next) => {
+              setModel(next);
+              setVariant("");
+            }}
+          />
+
+          <SelectField
+            id="finder-variant"
+            label="Variant / fuel"
+            value={variant}
+            options={variants}
+            placeholder="Select variant"
+            disabled={!model}
+            onChange={setVariant}
+          />
+
+          <SelectField
+            id="finder-battery-brand"
+            label="Battery brand"
+            value={batteryBrand}
+            options={availableBrands}
+            placeholder="All brands"
+            onChange={setBatteryBrand}
+          />
+
+          <button
+            type="submit"
+            disabled={!canSearch}
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-[12px] bg-[#50C878] px-5 text-[13px] font-bold text-[#123E29] shadow-[0_4px_12px_rgba(47,151,92,0.14),inset_0_1px_0_rgba(255,255,255,0.4)] transition-colors hover:bg-[#44BD6F] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#269B54] disabled:cursor-not-allowed disabled:opacity-45 lg:w-auto lg:min-w-[150px]"
+          >
+            Find
+            <ArrowRight size={16} aria-hidden="true" />
+          </button>
+        </div>
+      </form>
+
+      <p className="mt-3 text-[11px] leading-[17px] text-[#70889A]">
+        Demo vehicle list. Exact battery fitment is confirmed before installation.
+      </p>
     </section>
   );
 }
