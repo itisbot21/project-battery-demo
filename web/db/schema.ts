@@ -5,6 +5,7 @@ import {
   text,
   integer,
   boolean,
+  jsonb,
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
@@ -12,21 +13,62 @@ import {
 // PRODUCTS
 export const products = pgTable("products", {
   id: serial("id").primaryKey(),
+
   slug: text("slug").notNull().unique(),
   brand: text("brand").notNull(),
   model: text("model").notNull(),
   category: text("category").notNull(),
+
   capacityAh: integer("capacity_ah"),
   warrantyMonths: integer("warranty_months"),
+
+  // PRODUCT DETAIL PAGE CONTENT
+  description: text("description"),
+
+  // First image is the main product image
+  imageUrls: jsonb("image_urls")
+    .$type<string[]>()
+    .notNull()
+    .default([]),
+
+  features: jsonb("features")
+    .$type<string[]>()
+    .notNull()
+    .default([]),
+
+  specifications: jsonb("specifications")
+    .$type<Record<string, string>>()
+    .notNull()
+    .default({}),
+
+  // WARRANTY BREAKDOWN
+  warrantyFreeMonths: integer(
+    "warranty_free_months"
+  ),
+
+  warrantyProRataMonths: integer(
+    "warranty_pro_rata_months"
+  ),
+
+  // SEO
+  seoTitle: text("seo_title"),
+  seoDescription: text("seo_description"),
+
+  // PRICING (IN PAISE, GST INCLUDED)
   mrpPaise: integer("mrp_paise").notNull(),
+
   withoutExchangePaise: integer(
     "without_exchange_paise"
   ).notNull(),
+
   withExchangePaise: integer(
     "with_exchange_paise"
   ).notNull(),
+
+  // INVENTORY
   stock: integer("stock").notNull().default(0),
   active: boolean("active").notNull().default(true),
+
   createdAt: timestamp("created_at")
     .notNull()
     .defaultNow(),
@@ -52,16 +94,18 @@ export const vehicles = pgTable(
   ]
 );
 
-// BATTERY COMPATIBILITY
+// VERIFIED BATTERY COMPATIBILITY
 export const batteryCompatibility = pgTable(
   "battery_compatibility",
   {
     id: serial("id").primaryKey(),
+
     productId: integer("product_id")
       .notNull()
       .references(() => products.id, {
         onDelete: "cascade",
       }),
+
     vehicleId: integer("vehicle_id")
       .notNull()
       .references(() => vehicles.id, {
@@ -82,9 +126,11 @@ export const deliveryPincodes = pgTable(
   {
     pinCode: text("pin_code").primaryKey(),
     city: text("city").notNull(),
+
     active: boolean("active")
       .notNull()
       .default(true),
+
     createdAt: timestamp("created_at")
       .notNull()
       .defaultNow(),
@@ -103,6 +149,7 @@ export const orders = pgTable("orders", {
   pinCode: text("pin_code").notNull(),
 
   paymentMethod: text("payment_method").notNull(),
+
   paymentStatus: text("payment_status")
     .notNull()
     .default("pending"),

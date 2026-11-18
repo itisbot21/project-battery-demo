@@ -1,8 +1,9 @@
-
 import Link from "next/link";
 import { requireAdmin } from "@/lib/require-admin";
 import { db } from "@/db";
 import { products } from "@/db/schema";
+
+export const instant = false;
 
 export default async function AdminDashboard({
   searchParams,
