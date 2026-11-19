@@ -6,15 +6,19 @@ import { CheckoutSteps, LoadingPanel, Notice } from "@/components/design/commerc
 import { useEffect, useState } from "react";
 import { readSaved } from "@/lib/cart";
 import { CONFIRMATION_KEY, type Confirmation } from "@/lib/checkout-session";
+import { directRecoveryHref, listDirectAttempts } from "@/lib/direct-checkout";
 import { formatCurrency } from "@/lib/format-currency";
 
 export function OrderReceipt() {
   const [receipt, setReceipt] = useState<Confirmation | null>();
   const [notice, setNotice] = useState("");
+  const [hasEarlier, setHasEarlier] = useState(false);
   useEffect(() => {
     queueMicrotask(() => {
       try { setReceipt(readSaved<Confirmation>(sessionStorage, CONFIRMATION_KEY)); }
       catch { setReceipt(null); }
+      try { setHasEarlier(listDirectAttempts().some((attempt) => attempt.token)); }
+      catch { setHasEarlier(false); }
     });
   }, []);
 
@@ -37,6 +41,7 @@ export function OrderReceipt() {
         catch { setNotice("Open Track order and copy the address from your browser."); }
       }}><Copy size={17} aria-hidden="true" /> Copy tracking link</button>
     </div>
+    {hasEarlier && <Link className="text-link" href={directRecoveryHref}>Check earlier Buy Now checkouts</Link>}
     {notice && <Notice>{notice}</Notice>}
   </section></>;
 }

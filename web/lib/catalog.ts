@@ -13,10 +13,11 @@ export function listVehicles(type?: BatteryCategory) {
     .orderBy(asc(vehicles.type), asc(vehicles.brand), asc(vehicles.model), asc(vehicles.variant), asc(vehicles.id));
 }
 
-export async function listBrands() {
+export async function listBrands({ inStock = false } = {}) {
   const rows = await db.selectDistinct({ brand: products.brand }).from(products)
-    .where(sellableProducts).orderBy(asc(products.brand));
-  return [...new Map(rows.map(({ brand }) => [normalize(brand), brand.trim()])).values()];
+    .where(inStock ? and(sellableProducts, gte(products.stock, 1)) : sellableProducts)
+    .orderBy(asc(products.brand));
+  return [...new Map(rows.filter(({ brand }) => normalize(brand)).map(({ brand }) => [normalize(brand), brand.trim()])).values()];
 }
 
 type CatalogFilters = {
@@ -39,7 +40,7 @@ export function listCatalog(filters: CatalogFilters = {}, limit = PAGE_SIZE + 1)
   const search = filters.search && normalize(filters.search);
 
   if (filters.category) conditions.push(eq(products.category, filters.category));
-  if (brand) conditions.push(sql`lower(trim(${products.brand})) = ${brand}`);
+  if (brand) conditions.push(sql`lower(trim(regexp_replace(${products.brand}, '[[:space:]]+', ' ', 'g'))) = ${brand}`);
   if (search) conditions.push(sql`position(${search} in lower(concat_ws(' ', trim(${products.brand}), trim(${products.model})))) > 0`);
   if (filters.capacity) conditions.push(eq(products.capacityAh, filters.capacity));
   if (filters.warranty) conditions.push(gte(products.warrantyMonths, filters.warranty));

@@ -6,8 +6,8 @@ import { useState, useTransition } from "react";
 import { Check } from "lucide-react";
 import { Notice, StockStatus } from "@/components/design/commerce-ui";
 import { QuantityStepper } from "@/components/design/quantity-stepper";
-import { addToCart, DIRECT_KEY, MAX_LINE_QUANTITY, type CartItem } from "@/lib/cart";
-import { getPending } from "@/lib/checkout-session";
+import { addToCart, MAX_LINE_QUANTITY, type CartItem } from "@/lib/cart";
+import { directAttemptHref, stageDirectPurchase } from "@/lib/direct-checkout";
 import { formatCurrency } from "@/lib/format-currency";
 import type { Product } from "@/types/product";
 
@@ -29,10 +29,8 @@ export function ProductPurchasePanel({ product }: { product: Product }) {
     if (!canPurchase || quantity < 1 || quantity > maxQuantity) return;
     try {
       if (direct) {
-        if (!getPending("direct")) {
-          sessionStorage.setItem(DIRECT_KEY, JSON.stringify([{ productId: product.id, exchange, quantity }]));
-        }
-        startTransition(() => router.push("/checkout?buy=1"));
+        const id = stageDirectPurchase({ productId: product.id, exchange, quantity }, product.brand + " " + product.model);
+        startTransition(() => router.push(directAttemptHref(id)));
       } else {
         addToCart(product.id, exchange, quantity, product.stock);
         setMessage("Added to your cart.");

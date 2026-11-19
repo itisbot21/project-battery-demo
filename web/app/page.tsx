@@ -4,15 +4,16 @@ import { connection } from "next/server";
 import { Bike, CarFront, ChevronRight, MapPin } from "lucide-react";
 import { VerifiedFinder } from "@/components/battery-finder/verified-finder";
 import { LoadingPanel } from "@/components/design/commerce-ui";
+import { BatteryBrandSection } from "@/components/home/battery-brand-section";
+import { ManufacturerSection } from "@/components/home/manufacturer-section";
 import { PinChecker } from "@/components/layout/pin-checker";
 import { StorefrontFooter } from "@/components/layout/storefront-footer";
 import { StorefrontNav } from "@/components/layout/storefront-nav";
 import { ProductCard } from "@/components/products/product-card";
 import { listBrands, listCatalog, listVehicles } from "@/lib/catalog";
-import { manufacturerSlug } from "@/lib/store-policy";
 
 const homeVehicles = cache(() => listVehicles());
-const homeBrands = cache(listBrands);
+const homeBrands = cache(() => listBrands());
 
 async function HomeFinder() {
   await connection();
@@ -22,29 +23,11 @@ async function HomeFinder() {
 
 async function HomeCatalog() {
   await connection();
-  const [vehicles, brands, products] = await Promise.all([homeVehicles(), homeBrands(), listCatalog({ inStock: true }, 4)]);
-  const makes = [...new Map(vehicles.map((vehicle) => [vehicle.type + ":" + manufacturerSlug(vehicle.brand), vehicle])).values()];
+  const [vehicles, brands, products] = await Promise.all([homeVehicles(), listBrands({ inStock: true }), listCatalog({ inStock: true }, 4)]);
 
   return <>
-    {(makes.length > 0 || brands.length > 0) && <div className="store-container store-section home-discovery">
-      {makes.length > 0 && <section className="discovery-panel" id="manufacturers">
-        <h2>Browse by vehicle make</h2>
-        <div className="make-groups">{(["Car", "Bike"] as const).map((category) => {
-          const group = makes.filter((make) => make.type === category);
-          return group.length ? <div key={category}>
-            <h3>{category === "Car" ? "Cars" : "Bikes"}</h3>
-            <div className="store-chips">{group.map((make) => {
-              const slug = manufacturerSlug(make.brand);
-              return <Link key={slug} href={"/" + category.toLowerCase() + "-batteries/" + slug}>{make.brand}</Link>;
-            })}</div>
-          </div> : null;
-        })}</div>
-      </section>}
-      {brands.length > 0 && <section className="discovery-panel">
-        <h2>Battery brands</h2>
-        <div className="store-chips">{brands.map((brand) => <Link key={brand} href={"/shop?brand=" + encodeURIComponent(brand)}>{brand}</Link>)}</div>
-      </section>}
-    </div>}
+    <ManufacturerSection vehicles={vehicles} />
+    <BatteryBrandSection brands={brands} />
     <section className="store-container store-section" id="products">
       <div className="section-heading"><h2>Available batteries</h2><Link className="text-link" href="/shop">View all batteries</Link></div>
       {products.length ? <div className="catalog-grid">{products.map((product) => <ProductCard key={product.id} product={product} />)}</div>

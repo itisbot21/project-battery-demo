@@ -32,8 +32,8 @@ export function getCart(): CartItem[] {
   try { return cleanCart(readSaved(localStorage, CART_KEY)); } catch { return []; }
 }
 
-export function getDirectPurchase() {
-  return cleanCart(readSaved(sessionStorage, DIRECT_KEY)).slice(0, 1);
+export function getDirectPurchase(storage: Storage) {
+  return cleanCart(readSaved(storage, DIRECT_KEY)).slice(0, 1);
 }
 
 export function getCartCount() {

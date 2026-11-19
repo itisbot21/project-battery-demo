@@ -9,11 +9,13 @@ export const CONFIRMATION_KEY = "project-battery-confirmation";
 export const pendingKey = (mode: CheckoutMode) => "project-battery-pending-" + mode;
 export const getPending = (mode: CheckoutMode) => readSaved<PendingOrder>(sessionStorage, pendingKey(mode));
 
-export function startSubmission(mode: CheckoutMode) {
-  const existing = getPending(mode);
-  const token = existing?.token ?? Array.from(crypto.getRandomValues(new Uint8Array(32)),
+export function createCheckoutToken() {
+  return Array.from(crypto.getRandomValues(new Uint8Array(32)),
     (byte) => byte.toString(16).padStart(2, "0")).join("");
-  const pending = { token };
+}
+
+export function startSubmission(mode: "cart") {
+  const pending = getPending(mode) ?? { token: createCheckoutToken() };
   sessionStorage.setItem(pendingKey(mode), JSON.stringify(pending));
   return pending;
 }

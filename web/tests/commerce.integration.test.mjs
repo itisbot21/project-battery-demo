@@ -44,6 +44,10 @@ const { POST: track } = await import("../app/api/order-tracking/route.ts");
 const { manageOrder } = await import("../app/admin/orders/actions.ts");
 const { parseProductDraft } = await import("../lib/admin-product-data.ts");
 const { priceCart } = await import("../lib/cart-prices.ts");
+const { CART_KEY, DIRECT_KEY } = await import("../lib/cart.ts");
+const { pendingKey } = await import("../lib/checkout-session.ts");
+const { LEGACY_DIRECT_ATTEMPT, beginDirectSubmission, finishDirectAttempt, listDirectAttempts, stageDirectPurchase } =
+  await import("../lib/direct-checkout.ts");
 
 const migrationDir = new URL("../drizzle/", import.meta.url);
 const migrations = readdirSync(migrationDir).filter((name) => name.endsWith(".sql")).sort();
@@ -209,4 +213,48 @@ test("product forms accept existing photos and preserve submitted details indepe
   assert.equal(parsed?.draft.description, "Detailed description");
   assert.deepEqual(parsed?.draft.specifications, { Terminal: "left" });
   assert.equal(parsed?.draft.warrantyProRataMonths, 18);
+});
+
+test("switching products after an interrupted Buy Now keeps both selections and recovers the earlier order", async () => {
+  const [first, next] = await query(
+    "insert into products (slug, brand, model, category, mrp_paise, without_exchange_paise, with_exchange_paise, stock) " +
+    "values ('interrupted-a','Example','INT-A','Car',110000,100000,80000,3), " +
+    "('interrupted-b','Example','INT-B','Car',110000,100000,80000,3) returning id"
+  );
+  const earlierItem = { productId: first.id, quantity: 1, exchange: "with" };
+  const newItem = { productId: next.id, quantity: 2, exchange: "without" };
+  const normalCart = JSON.stringify([{ ...earlierItem, exchange: "without" }]);
+  const earlierToken = token(100);
+  const saved = new Map([[DIRECT_KEY, JSON.stringify([earlierItem])],
+    [pendingKey("direct"), JSON.stringify({ token: earlierToken })], [CART_KEY, normalCart]]);
+  const storage = {
+    getItem: (key) => saved.get(key) ?? null,
+    setItem: (key, value) => saved.set(key, value),
+  };
+
+  // The first server response is lost. Its legacy tab state is still present when Buy Now opens another product.
+  assert.equal((await checkout(earlierToken, [line(first.id)])).status, 201);
+  const newId = stageDirectPurchase(newItem, "Example INT-B", storage);
+  const attempts = listDirectAttempts(storage);
+  assert.deepEqual(attempts.find(({ id }) => id === newId).item, newItem);
+  assert.deepEqual(attempts.find(({ id }) => id === LEGACY_DIRECT_ATTEMPT).item, earlierItem);
+  assert.throws(() => beginDirectSubmission(newId, earlierItem, storage), /selected battery changed/);
+  const pending = beginDirectSubmission(newId, newItem, storage);
+  assert.notEqual(pending.token, earlierToken);
+  assert.equal(stageDirectPurchase(newItem, "Example INT-B", storage), newId);
+  assert.deepEqual(beginDirectSubmission(newId, newItem, storage), pending);
+  const newOrder = await checkout(pending.token, [line(next.id, 2, "without", 100_000)]);
+  assert.equal(newOrder.status, 201);
+  assert.deepEqual((await newOrder.json()).purchased, [newItem]);
+  finishDirectAttempt(newId, pending.token, storage);
+
+  const recovery = await track(body({ token: listDirectAttempts(storage)[0].token, confirmationOnly: true }));
+  assert.equal(recovery.status, 200);
+  assert.deepEqual((await recovery.json()).purchased, [earlierItem]);
+  assert.equal((await checkout(earlierToken, [line(first.id)])).status, 200);
+  assert.equal(await stock(first.id), 2);
+  assert.equal(await stock(next.id), 1);
+  finishDirectAttempt(LEGACY_DIRECT_ATTEMPT, earlierToken, storage);
+  assert.deepEqual(listDirectAttempts(storage), []);
+  assert.equal(saved.get(CART_KEY), normalCart);
 });

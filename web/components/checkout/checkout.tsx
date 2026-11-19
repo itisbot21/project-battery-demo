@@ -5,14 +5,32 @@ import { Banknote, ChevronLeft } from "lucide-react";
 import { CheckoutSteps, LoadingPanel, Notice } from "@/components/design/commerce-ui";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { DIRECT_KEY, getCart, getDirectPurchase, lineKey, removePurchased, type CartItem } from "@/lib/cart";
+import { getCart, lineKey, removePurchased, type CartItem } from "@/lib/cart";
 import { fetchCartProducts, priceCart } from "@/lib/cart-prices";
 import { CONFIRMATION_KEY, getPending, pendingKey, recoverConfirmation, startSubmission,
-  type CheckoutMode, type Confirmation } from "@/lib/checkout-session";
+  type Confirmation } from "@/lib/checkout-session";
+import { beginDirectSubmission, describeDirectAttempt, directAttemptHref, finishDirectAttempt, listDirectAttempts,
+  type DirectAttempt } from "@/lib/direct-checkout";
 import { formatCurrency } from "@/lib/format-currency";
 import type { Product } from "@/types/product";
 
-export function Checkout({ mode }: { mode: CheckoutMode }) {
+function EarlierCheckouts({ attempts }: { attempts: DirectAttempt[] }) {
+  return <section className="panel operations-card checkout-recovery">
+    <h2>Earlier Buy Now checkouts</h2>
+    <p className="muted">An earlier order may still be processing. Open it to check its status or retry that order safely.</p>
+    <ul>{attempts.map((attempt) => <li key={attempt.id}>
+      <Link className="text-link" href={directAttemptHref(attempt.id)}>
+        Check earlier checkout <span className="block">{describeDirectAttempt(attempt)}</span>
+      </Link>
+    </li>)}</ul>
+  </section>;
+}
+
+export function Checkout({ attemptId, recoveryOnly = false }: { attemptId?: string; recoveryOnly?: boolean }) {
+  const isDirect = attemptId !== undefined;
+  const [current, setCurrent] = useState<DirectAttempt>();
+  const [earlier, setEarlier] = useState<DirectAttempt[]>([]);
+  const [continueNew, setContinueNew] = useState(false);
   const router = useRouter();
   const [items, setItems] = useState<CartItem[]>([]);
   const [catalog, setCatalog] = useState<Product[]>([]);
@@ -27,19 +45,33 @@ export function Checkout({ mode }: { mode: CheckoutMode }) {
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
   const submitting = useRef(false);
+  const active = useRef(false);
+  const contactTitle = useRef<HTMLHeadingElement>(null);
   const summary = priceCart(items, catalog);
+  const reviewSelection = Boolean(current?.item && !current.token && earlier.length && !continueNew);
+
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
+
+  useEffect(() => {
+    if (continueNew) contactTitle.current?.focus();
+  }, [continueNew]);
 
   const confirm = useCallback((confirmation: Confirmation) => {
     sessionStorage.setItem(CONFIRMATION_KEY, JSON.stringify(confirmation));
-    sessionStorage.removeItem(pendingKey(mode));
     try {
-      if (mode === "direct") sessionStorage.removeItem(DIRECT_KEY);
-      else removePurchased(confirmation.purchased);
+      if (attemptId !== undefined) finishDirectAttempt(attemptId, confirmation.token);
+      else {
+        sessionStorage.removeItem(pendingKey("cart"));
+        removePurchased(confirmation.purchased);
+      }
     } catch {
       // The order is already saved. The confirmation can still be shown.
     }
     router.replace("/order-confirmation");
-  }, [mode, router]);
+  }, [attemptId, router]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -48,13 +80,21 @@ export function Checkout({ mode }: { mode: CheckoutMode }) {
       setLoading(true);
       setLoadingError("");
       try {
-        const pending = getPending(mode);
-        if (pending) {
-          const saved = await recoverConfirmation(pending.token, controller.signal);
+        let attempt: DirectAttempt | undefined;
+        if (isDirect) {
+          const attempts = listDirectAttempts();
+          setEarlier(attempts.filter((candidate) => candidate.token && (recoveryOnly || candidate.id !== attemptId)));
+          if (recoveryOnly) return;
+          attempt = attempts.find((candidate) => candidate.id === attemptId);
+          setCurrent(attempt);
+        }
+        const token = isDirect ? attempt?.token : getPending("cart")?.token;
+        if (token) {
+          const saved = await recoverConfirmation(token, controller.signal);
           if (controller.signal.aborted) return;
           if (saved) { confirm(saved); return; }
         }
-        const selection = mode === "direct" ? getDirectPurchase() : getCart();
+        const selection = isDirect ? (attempt?.item ? [attempt.item] : []) : getCart();
         const products = await fetchCartProducts(selection, controller.signal);
         if (controller.signal.aborted) return;
         setItems(selection);
@@ -67,7 +107,7 @@ export function Checkout({ mode }: { mode: CheckoutMode }) {
     }
     queueMicrotask(() => void refresh());
     return () => controller.abort();
-  }, [mode, confirm, reload]);
+  }, [attemptId, confirm, isDirect, recoveryOnly, reload]);
 
   async function checkPin() {
     if (!/^[1-9]\d{5}$/.test(pin)) { setPinNote("Enter a valid six-digit PIN code."); return; }
@@ -95,14 +135,14 @@ export function Checkout({ mode }: { mode: CheckoutMode }) {
 
   async function placeOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!summary.valid || verified?.pin !== pin || submitting.current || loading || loadingError) return;
+    if (!summary.valid || verified?.pin !== pin || submitting.current || loading || loadingError || reviewSelection) return;
     const fields = new FormData(event.currentTarget);
     submitting.current = true;
     setSending(true);
     setError("");
     let accepted = false;
     try {
-      const pending = startSubmission(mode);
+      const pending = isDirect ? beginDirectSubmission(attemptId, items[0]) : startSubmission("cart");
       const response = await fetch("/api/orders", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: pending.token, paymentMethod: "cod",
@@ -110,7 +150,13 @@ export function Checkout({ mode }: { mode: CheckoutMode }) {
           items: summary.rows.map(({ item, unitPricePaise }) => ({ ...item, unitPricePaise })),
         }),
       });
+      if (!active.current) return;
+      if (response.status === 429) {
+        setError("There were too many order attempts. Wait a moment and retry from this checkout.");
+        return;
+      }
       const result = await response.json();
+      if (!active.current) return;
       if (response.ok && result.success === true) {
         confirm({ id: result.orderId, totalPaise: result.totalPaise, token: pending.token, purchased: result.purchased });
         accepted = true;
@@ -118,10 +164,11 @@ export function Checkout({ mode }: { mode: CheckoutMode }) {
       }
       if (result.code === "ALREADY_PLACED") {
         const saved = await recoverConfirmation(pending.token);
+        if (!active.current) return;
         if (saved) { confirm(saved); accepted = true; return; }
       }
-      if (response.status >= 400 && response.status < 500 && result.code !== "ALREADY_PLACED") {
-        sessionStorage.removeItem(pendingKey(mode));
+      if (!isDirect && response.status >= 400 && response.status < 500 && result.code !== "ALREADY_PLACED") {
+        sessionStorage.removeItem(pendingKey("cart"));
       }
       if (result.code === "PRICE_CHANGED" || result.code === "STOCK_CHANGED") {
         try { setCatalog(await fetchCartProducts(items)); } catch { setLoadingError("Unable to refresh prices. Please retry."); }
@@ -129,9 +176,9 @@ export function Checkout({ mode }: { mode: CheckoutMode }) {
       if (result.code === "PIN_UNAVAILABLE") setVerified(undefined);
       setError(result.error ?? "We couldn’t confirm your order. Retry from this checkout.");
     } catch {
-      setError("We couldn’t confirm your order. Retry from this checkout to recover it safely.");
+      if (active.current) setError("We couldn’t confirm your order. Retry from this checkout to recover it safely.");
     } finally {
-      if (!accepted) {
+      if (!accepted && active.current) {
         submitting.current = false;
         setSending(false);
       }
@@ -142,20 +189,36 @@ export function Checkout({ mode }: { mode: CheckoutMode }) {
     <>
       <CheckoutSteps step="checkout" />
       <div className="page-intro">
-        <h1>{mode === "direct" ? "Buy now checkout" : "Checkout"}</h1>
-        <p className="muted">{mode === "direct" ? "Review the battery selected on the product page." : "Enter your contact and delivery details."}</p>
-        <Link className="shop-button quiet" href={mode === "direct" ? "/shop" : "/cart"}><ChevronLeft size={17} aria-hidden="true" />{mode === "direct" ? "Browse batteries" : "Back to cart"}</Link>
+        <h1>{recoveryOnly ? "Recover a Buy Now order" : isDirect ? "Buy now checkout" : "Checkout"}</h1>
+        {!recoveryOnly && <p className="muted">{isDirect ? "Review the battery selected on the product page." : "Enter your contact and delivery details."}</p>}
+        <Link className="shop-button quiet" href={isDirect ? "/shop" : "/cart"}><ChevronLeft size={17} aria-hidden="true" />{isDirect ? "Browse batteries" : "Back to cart"}</Link>
       </div>
+      {!loading && earlier.length > 0 && <EarlierCheckouts attempts={earlier} />}
       {loading ? <LoadingPanel label="Checking your order and current prices…" /> :
       loadingError ? <section className="panel operations-card">
         <Notice tone="critical">{loadingError}</Notice><button className="shop-button justify-self-start" onClick={() => setReload((value) => value + 1)}>Retry</button>
       </section> :
+      recoveryOnly ? (earlier.length ? null : <section className="panel empty-catalog"><p>No earlier Buy Now checkouts are saved in this tab.</p></section>) :
       !items.length ? <section className="panel empty-catalog">
-        <h2>No batteries selected</h2><Link className="shop-button primary" href="/shop">Browse batteries</Link>
+        <h2>No batteries selected</h2>
+        {current?.token && <p>No order was found yet. If you just placed it, try checking again in a moment.</p>}
+        {current?.token ? <button className="shop-button" onClick={() => setReload((value) => value + 1)}>Check again</button>
+          : <Link className="shop-button primary" href="/shop">Browse batteries</Link>}
       </section> :
+      reviewSelection && current ? <section className="panel operations-card">
+        <h2>Your new selection</h2>
+        <p><strong>{describeDirectAttempt(current)}</strong></p>
+        <p className="muted">Continue to place a separate order for this battery, or check your earlier checkout above.</p>
+        <button className="shop-button primary justify-self-start" onClick={() => setContinueNew(true)}>Continue with this battery</button>
+      </section> :
+      <>
+      {current?.token && <div className="checkout-recovery">
+        <Notice>We haven’t found a confirmation for this checkout yet. You can retry this same order safely.</Notice>
+        <button className="shop-button quiet mt-2" type="button" disabled={sending} onClick={() => setReload((value) => value + 1)}>Check again</button>
+      </div>}
       <div className="purchase-layout checkout-layout">
         <section className="panel operations-card">
-          <h2>Contact and delivery</h2>
+          <h2 ref={contactTitle} tabIndex={-1}>Contact and delivery</h2>
           <form onSubmit={(event) => void placeOrder(event)}>
             <fieldset disabled={sending} className="grid gap-4">
               <label>Full name<input className="store-input" name="name" autoComplete="name" required minLength={2} maxLength={100} /></label>
@@ -194,7 +257,7 @@ export function Checkout({ mode }: { mode: CheckoutMode }) {
           <div><p className="field-label">Estimated total</p><p className="total">{formatCurrency(summary.totalPaise)}</p></div>
           <p className="muted">GST included. Free delivery and installation.</p>
         </aside>
-      </div>}
+      </div></>}
     </>
   );
 }
