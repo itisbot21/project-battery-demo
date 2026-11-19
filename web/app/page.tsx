@@ -1,194 +1,113 @@
-"use client";
-
-import { useState } from "react";
+import { cache, Suspense } from "react";
 import Link from "next/link";
+import { connection } from "next/server";
+import { Bike, CarFront, ChevronRight, MapPin } from "lucide-react";
+import { VerifiedFinder } from "@/components/battery-finder/verified-finder";
+import { LoadingPanel } from "@/components/design/commerce-ui";
+import { PinChecker } from "@/components/layout/pin-checker";
+import { StorefrontFooter } from "@/components/layout/storefront-footer";
 import { StorefrontNav } from "@/components/layout/storefront-nav";
-import { HeroSection } from "@/components/home/hero-section";
-import { ProductSection } from "@/components/home/product-section";
-import { useProducts } from "@/hooks/use-products";
-import { addToCart } from "@/lib/cart";
-import type { FinderSelection } from "@/components/battery-finder/battery-finder";
-import type { Product } from "@/types/product";
-import type { SelectedVehicle } from "@/types/vehicle";
-import { ManufacturerSection } from "@/components/home/manufacturer-section";
-import { BatteryBrandSection } from "@/components/home/battery-brand-section";
+import { ProductCard } from "@/components/products/product-card";
+import { listBrands, listCatalog, listVehicles } from "@/lib/catalog";
+import { manufacturerSlug } from "@/lib/store-policy";
+
+const homeVehicles = cache(() => listVehicles());
+const homeBrands = cache(listBrands);
+
+async function HomeFinder() {
+  await connection();
+  const [vehicles, brands] = await Promise.all([homeVehicles(), homeBrands()]);
+  return <VerifiedFinder vehicles={vehicles} brands={brands} />;
+}
+
+async function HomeCatalog() {
+  await connection();
+  const [vehicles, brands, products] = await Promise.all([homeVehicles(), homeBrands(), listCatalog({ inStock: true }, 4)]);
+  const makes = [...new Map(vehicles.map((vehicle) => [vehicle.type + ":" + manufacturerSlug(vehicle.brand), vehicle])).values()];
+
+  return <>
+    {(makes.length > 0 || brands.length > 0) && <div className="store-container store-section home-discovery">
+      {makes.length > 0 && <section className="discovery-panel" id="manufacturers">
+        <h2>Browse by vehicle make</h2>
+        <div className="make-groups">{(["Car", "Bike"] as const).map((category) => {
+          const group = makes.filter((make) => make.type === category);
+          return group.length ? <div key={category}>
+            <h3>{category === "Car" ? "Cars" : "Bikes"}</h3>
+            <div className="store-chips">{group.map((make) => {
+              const slug = manufacturerSlug(make.brand);
+              return <Link key={slug} href={"/" + category.toLowerCase() + "-batteries/" + slug}>{make.brand}</Link>;
+            })}</div>
+          </div> : null;
+        })}</div>
+      </section>}
+      {brands.length > 0 && <section className="discovery-panel">
+        <h2>Battery brands</h2>
+        <div className="store-chips">{brands.map((brand) => <Link key={brand} href={"/shop?brand=" + encodeURIComponent(brand)}>{brand}</Link>)}</div>
+      </section>}
+    </div>}
+    <section className="store-container store-section" id="products">
+      <div className="section-heading"><h2>Available batteries</h2><Link className="text-link" href="/shop">View all batteries</Link></div>
+      {products.length ? <div className="catalog-grid">{products.map((product) => <ProductCard key={product.id} product={product} />)}</div>
+        : <div className="empty-catalog"><p>Online stock is currently unavailable.</p><Link href="/contact" className="text-link">Ask about availability</Link></div>}
+    </section>
+  </>;
+}
 
 export default function Home() {
-  const { products, loading, error } = useProducts();
-  const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState("All");
-
-  const [vehicle, setVehicle] =
-    useState<SelectedVehicle | null>(null);
-
-  const [finderKey, setFinderKey] = useState(0);
-  const [cartMessage, setCartMessage] = useState("");
-
-  const sellableProducts = products.filter(
-    (product) =>
-      product.category === "Car" ||
-      product.category === "Bike"
-  );
-
-  const filteredProducts = sellableProducts.filter(
-    (product) => {
-      const matchesCategory =
-        selected === "All" ||
-        product.category === selected;
-
-      const matchesBrand =
-        `${product.brand} ${product.model}`
-          .toLowerCase()
-          .includes(search.toLowerCase());
-
-      const matchesVehicle =
-        !vehicle ||
-        vehicle.type === product.category;
-
-      return (
-        matchesCategory &&
-        matchesBrand &&
-        matchesVehicle
-      );
-    }
-  );
-
-  function clearFilters() {
-    setSearch("");
-    setSelected("All");
-    setVehicle(null);
-    setFinderKey((key) => key + 1);
-  }
-
-  function addBattery(
-    product: Product,
-    exchange: "with" | "without"
-  ) {
-    addToCart(product.id, exchange);
-
-    setCartMessage(
-      `${product.brand} ${product.model} added to cart`
-    );
-  }
-  function handleFinderSearch(selection: FinderSelection) {
-    setSelected(selection.type);
-    setSearch(selection.batteryBrand);
-    setVehicle({
-      type: selection.type,
-      name: [selection.brand, selection.model, selection.variant]
-        .filter(Boolean)
-        .join(" "),
-    });
-    document.getElementById("products")?.scrollIntoView({ behavior: "smooth" });
-  }
-
-  return (
-    <main className="relative min-h-screen overflow-x-clip bg-[#F6FAFC] text-[#17364E]">
-
-      {/* PAGE BACKGROUND */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 h-[660px] overflow-hidden"
-      >
-        <div className="absolute -left-40 top-0 h-[420px] w-[420px] rounded-full bg-[#89CFF0]/25 blur-[110px]" />
-
-        <div className="absolute -right-32 top-24 h-[350px] w-[350px] rounded-full bg-[#89CFF0]/10 blur-[110px]" />
-      </div>
-
-      <StorefrontNav />
-
-      <HeroSection
-        finderKey={finderKey}
-        availableBrands={[...new Set(sellableProducts.map((product) => product.brand))].sort()}
-        onSearch={handleFinderSearch}
-      />
-
-      <ManufacturerSection />
-
-      <BatteryBrandSection
-        onSelectBrand={(brand) => {
-          setSearch(brand);
-          setSelected("All");
-          setVehicle(null);
-
-          requestAnimationFrame(() => {
-            document
-              .getElementById("products")
-              ?.scrollIntoView({
-                behavior: "smooth",
-                block: "start",
-              });
-          });
-        }}
-      />
-
-      <ProductSection
-        vehicle={vehicle}
-        loading={loading}
-        error={error}
-        filteredProducts={filteredProducts}
-        clearFilters={clearFilters}
-        onAdd={addBattery}
-      />
-      {/* CART CONFIRMATION */}
-      {cartMessage && (
-        <div
-          role="status"
-          className="fixed bottom-6 left-1/2 z-[60] w-[calc(100%-32px)] max-w-sm -translate-x-1/2 rounded-[18px] border border-[#C5DFEB] bg-white/90 p-4 text-center shadow-xl backdrop-blur-xl"
-        >
-          <p className="text-sm font-semibold text-[#25475F]">
-            {cartMessage}
-          </p>
-
-          <div className="mt-3 flex items-center justify-center gap-4">
-            <Link
-              href="/cart"
-              className="text-sm font-bold text-[#287FAF] underline"
-            >
-              View cart
-            </Link>
-
-            <button
-              type="button"
-              onClick={() => setCartMessage("")}
-              className="text-sm text-[#647D8F]"
-            >
-              Dismiss
-            </button>
+  return <>
+    <StorefrontNav />
+    <main id="main-content" tabIndex={-1}>
+      <section className="home-hero" aria-labelledby="home-title">
+        <div className="store-container hero-grid">
+          <div className="hero-copy">
+            <p className="eyebrow hero-location"><MapPin size={15} aria-hidden="true" /> Mumbai & Navi Mumbai</p>
+            <h1 id="home-title">Car &amp; bike batteries. <em>Fitted at your door.</em></h1>
+            <p>Find a verified fit, compare prices with and without exchange, and pay after installation.</p>
+            <div className="hero-actions">
+              <a className="shop-button primary" href="#battery-finder">Find my battery</a>
+              <Link className="shop-button" href="/shop">Browse batteries</Link>
+            </div>
+          </div>
+          <div className="energy-board" aria-hidden="true">
+            <i className="energy-trace energy-trace-one" /><i className="energy-trace energy-trace-two" />
+            <div className="energy-terminal energy-positive"><span>+</span></div>
+            <div className="energy-terminal energy-negative"><span>−</span></div>
+            <i className="energy-junction" />
           </div>
         </div>
-      )}
-
-      {/* FOOTER */}
-      <footer className="border-t border-[#E1EDF3] bg-white/50 px-5 py-10 text-center backdrop-blur-xl">
-        <h2 className="text-lg font-extrabold tracking-tight text-[#243F56]">
-          PROJECT
-          <span className="text-[#4C9FC9]">
-            BATTERY
-          </span>
-        </h2>
-
-        <p className="mt-2 text-xs text-[#6E8494]">
-          Car &amp; bike batteries · Mumbai &amp;
-          Navi Mumbai
-        </p>
-
-        <div className="mt-4 flex items-center justify-center gap-5 text-xs">
-          <Link
-            href="/about"
-            className="font-semibold text-[#387DA4] hover:underline"
-          >
-            About Us
-          </Link>
-
-          <Link
-            href="/#products"
-            className="font-semibold text-[#387DA4] hover:underline"
-          >
-            Shop Batteries
-          </Link>
-        </div>
-      </footer>
+      </section>
+      <div className="store-container home-finder">
+        <Suspense fallback={<div id="battery-finder"><LoadingPanel label="Loading vehicle options…" /></div>}><HomeFinder /></Suspense>
+      </div>
+      <section className="store-container store-section home-paths" aria-label="Shop by vehicle type">
+        <Link className="category-path" href="/car-batteries">
+          <span className="path-icon"><CarFront size={24} aria-hidden="true" /></span>
+          <div><strong>Car batteries</strong><small>Explore by make or model</small></div><ChevronRight size={20} aria-hidden="true" />
+        </Link>
+        <Link className="category-path" href="/bike-batteries">
+          <span className="path-icon"><Bike size={24} aria-hidden="true" /></span>
+          <div><strong>Bike batteries</strong><small>Explore by make or model</small></div><ChevronRight size={20} aria-hidden="true" />
+        </Link>
+      </section>
+      <Suspense fallback={<div className="store-container store-section"><LoadingPanel label="Loading the catalog…" cards /></div>}><HomeCatalog /></Suspense>
+      <div className="store-container store-section home-service">
+        <section className="home-coverage" id="delivery">
+          <p className="eyebrow">Mumbai & Navi Mumbai</p>
+          <h2>Check delivery at your address</h2>
+          <p className="muted">Delivery and installation are free for eligible PIN codes.</p>
+          <PinChecker />
+        </section>
+        <section className="home-order">
+          <h2>From order to installation</h2>
+          <ol>
+            <li><span aria-hidden="true">1</span> Choose your battery and place a cash-on-delivery order.</li>
+            <li><span aria-hidden="true">2</span> Our team calls to confirm your delivery timing.</li>
+            <li><span aria-hidden="true">3</span> We install the battery and check any exchange before you pay.</li>
+          </ol>
+          <Link className="text-link" href="/exchange">How old battery exchange works</Link>
+        </section>
+      </div>
     </main>
-  );
+    <StorefrontFooter />
+  </>;
 }

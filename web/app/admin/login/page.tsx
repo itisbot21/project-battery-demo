@@ -1,36 +1,30 @@
-
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { Eye, EyeOff } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Notice } from "@/components/design/commerce-ui";
 
 export default function AdminLogin() {
   const router = useRouter();
-
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [visible, setVisible] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const fields = new FormData(event.currentTarget);
     setError("");
     setLoading(true);
-
     try {
       const result = await authClient.signIn.email({
-        email,
-        password,
+        email: String(fields.get("email") ?? ""), password: String(fields.get("password") ?? ""),
       });
-
       if (result.error) {
         setError("Invalid login credentials.");
         return;
       }
-
       router.push("/admin");
       router.refresh();
     } catch {
@@ -40,73 +34,24 @@ export default function AdminLogin() {
     }
   }
 
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
-        <p className="text-sm font-bold text-orange-600">
-          PROJECT BATTERY
-        </p>
-
-        <h1 className="mt-3 text-3xl font-bold text-slate-900">
-          Admin Login
-        </h1>
-
-        <p className="mt-2 text-sm text-slate-500">
-          Sign in to manage your battery store.
-        </p>
-
-        <form onSubmit={handleLogin} className="mt-8 space-y-5">
-          <div>
-            <label
-              htmlFor="email"
-              className="mb-2 block text-sm font-medium text-slate-900"
-            >
-              Email
-            </label>
-
-            <Input
-              id="email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@example.com"
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="password"
-              className="mb-2 block text-sm font-medium text-slate-900"
-            >
-              Password
-            </label>
-
-            <Input
-              id="password"
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter password"
-            />
-          </div>
-
-          {error && (
-            <p role="alert" className="text-sm text-red-600">
-              {error}
-            </p>
-          )}
-
-          <Button
-            type="submit"
-            disabled={loading}
-            className="w-full"
-          >
-            {loading ? "Signing in..." : "Sign In"}
-          </Button>
-        </form>
-      </div>
-    </main>
-  );
+  return <main className="admin-login">
+    <section className="panel operations-card admin-login-card">
+      <h1>Admin sign-in</h1>
+      <p className="muted">Access inventory, orders and delivery settings.</p>
+      <form onSubmit={handleLogin}>
+        <label>Email<input name="email" className="store-input" type="email" autoComplete="username" required /></label>
+        <div className="form-field">
+          <label htmlFor="admin-password">Password</label>
+          <span className="password-input">
+            <input id="admin-password" name="password" className="store-input" type={visible ? "text" : "password"} autoComplete="current-password" required />
+            <button type="button" className="icon-button" aria-label={visible ? "Hide password" : "Show password"} onClick={() => setVisible((value) => !value)}>
+              {visible ? <EyeOff size={19} aria-hidden="true" /> : <Eye size={19} aria-hidden="true" />}
+            </button>
+          </span>
+        </div>
+        {error && <Notice tone="critical">{error}</Notice>}
+        <button type="submit" className="shop-button primary" disabled={loading}>{loading ? "Signing in…" : "Sign in"}</button>
+      </form>
+    </section>
+  </main>;
 }

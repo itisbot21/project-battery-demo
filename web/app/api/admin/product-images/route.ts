@@ -4,7 +4,6 @@ import { put } from "@vercel/blob";
 
 import { auth } from "@/lib/auth";
 
-export const runtime = "nodejs";
 
 const MAX_IMAGE_SIZE = 3_000_000;
 
@@ -184,7 +183,10 @@ export async function POST(request: Request) {
         );
     }
 
-    // UPLOAD TO VERCEL BLOB
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+        return Response.json({ error: "Image uploads are disabled. Save an existing image URL in the product form." }, { status: 503 });
+    }
+
     try {
         const filename =
             `products/${randomUUID()}.${extension}`;

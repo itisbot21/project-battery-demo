@@ -1,168 +1,52 @@
 import Link from "next/link";
-import { requireAdmin } from "@/lib/require-admin";
+import { and, asc, count, desc, inArray, lte } from "drizzle-orm";
 import { db } from "@/db";
-import { products } from "@/db/schema";
+import { orders, products } from "@/db/schema";
+import { AdminPage, AdminStatus } from "@/components/admin/admin-page";
+import { LoadingPanel, Notice } from "@/components/design/commerce-ui";
+import { Suspense } from "react";
+import { requireAdmin } from "@/lib/require-admin";
+import { orderStatusLabel } from "@/lib/order-policy";
+import { sellableProducts } from "@/lib/catalog";
 
-export const instant = false;
 
-export default async function AdminDashboard({
-  searchParams,
-}: {
-  searchParams: Promise<{
-    created?: string;
-    updated?: string;
-  }>;
-}) {
-  const session = await requireAdmin();
+export default async function AdminDashboard({ searchParams }: PageProps<"/admin">) {
+  await requireAdmin();
+  return <Suspense fallback={<div className="store-container admin-screen"><LoadingPanel label="Loading operations overview…" /></div>}>
+    <DashboardContent searchParams={searchParams} />
+  </Suspense>;
+}
 
+async function DashboardContent({ searchParams }: { searchParams: PageProps<"/admin">["searchParams"] }) {
   const query = await searchParams;
-
-  const inventory = await db.select().from(products);
-
-  const totalStock = inventory.reduce(
-    (total, product) => total + product.stock,
-    0
-  );
-
-  const activeProducts = inventory.filter(
-    (product) => product.active
-  ).length;
-
-  return (
-    <main className="min-h-screen bg-slate-100 p-6 text-slate-900">
-      <div className="mx-auto max-w-6xl">
-
-        <p className="text-sm font-bold text-orange-600">
-          PROJECT BATTERY
-        </p>
-
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold">
-              Admin Dashboard
-            </h1>
-
-            <p className="mt-2 text-slate-600">
-              Welcome, {session.user.name}
-            </p>
-          </div>
-
-          <Link
-            href="/admin/products/new"
-            className="rounded-lg bg-orange-600 px-5 py-3 font-semibold text-white hover:bg-orange-700"
-          >
-            + Add New Battery
-          </Link>
-
-          <Link
-  href="/admin/pincodes"
-  className="rounded-lg border border-orange-300 px-5 py-3 font-semibold text-orange-700 hover:bg-orange-50"
->
-  Manage Delivery PIN Codes
-</Link>
-        </div>
-
-        {(query.created === "1" ||
-          query.updated === "1") && (
-          <div className="mt-6 rounded-lg bg-green-50 p-4 text-green-800">
-            {query.created === "1"
-              ? "Battery added successfully!"
-              : "Battery updated successfully!"}
-          </div>
-        )}
-
-        {/* Dashboard Statistics */}
-        <div className="mt-8 grid gap-4 sm:grid-cols-3">
-
-          <div className="rounded-xl bg-white p-6 shadow-sm">
-            <p className="text-sm text-slate-500">
-              Total Products
-            </p>
-
-            <p className="mt-2 text-3xl font-bold">
-              {inventory.length}
-            </p>
-          </div>
-
-          <div className="rounded-xl bg-white p-6 shadow-sm">
-            <p className="text-sm text-slate-500">
-              Active Products
-            </p>
-
-            <p className="mt-2 text-3xl font-bold">
-              {activeProducts}
-            </p>
-          </div>
-
-          <div className="rounded-xl bg-white p-6 shadow-sm">
-            <p className="text-sm text-slate-500">
-              Total Battery Units
-            </p>
-
-            <p className="mt-2 text-3xl font-bold">
-              {totalStock}
-            </p>
-          </div>
-
-        </div>
-
-        {/* Inventory List */}
-        <section className="mt-8 rounded-xl bg-white p-6 shadow-sm">
-
-          <h2 className="text-xl font-bold">
-            Battery Inventory
-          </h2>
-
-          <div className="mt-5 space-y-3">
-
-            {inventory.map((product) => (
-              <div
-                key={product.id}
-                className="flex flex-wrap items-center justify-between gap-4 border-b py-4"
-              >
-                <div>
-                  <p className="font-semibold">
-                    {product.brand} {product.model}
-                  </p>
-
-                  <p className="mt-1 text-sm text-slate-500">
-                    {product.category} Battery
-                  </p>
-
-                  <p className={`mt-2 text-sm font-medium ${
-                    product.active
-                      ? "text-green-700"
-                      : "text-red-600"
-                  }`}>
-                    {product.active ? "● Active" : "● Inactive"}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-5">
-                  <p className="text-sm font-medium">
-                    {product.stock} units
-                  </p>
-
-                  <Link
-                    href={`/admin/products/${product.id}/edit`}
-                    className="rounded-lg border border-orange-300 px-4 py-2 text-sm font-semibold text-orange-700 hover:bg-orange-50"
-                  >
-                    Edit
-                  </Link>
-                </div>
-              </div>
-            ))}
-
-            {inventory.length === 0 && (
-              <p className="py-6 text-slate-500">
-                No batteries in inventory yet.
-              </p>
-            )}
-
-          </div>
-        </section>
-
-      </div>
-    </main>
-  );
+  const [counts, stock, recent] = await Promise.all([
+    db.select({ status: orders.orderStatus, total: count() }).from(orders).groupBy(orders.orderStatus),
+    db.select({ id: products.id, brand: products.brand, model: products.model, stock: products.stock })
+      .from(products).where(and(sellableProducts, lte(products.stock, 3))).orderBy(asc(products.stock), asc(products.id)).limit(12),
+    db.select({ id: orders.id, status: orders.orderStatus, city: orders.city }).from(orders).orderBy(desc(orders.id)).limit(8),
+  ]);
+  const orderCount = new Map(counts.map(({ status, total }) => [status, total]));
+  const countFor = (...statuses: string[]) => statuses.reduce((total, status) => total + (orderCount.get(status) ?? 0), 0);
+  const inventory = await db.select({ active: products.active, stock: products.stock }).from(products).where(inArray(products.category, ["Car", "Bike"]));
+  const active = inventory.filter((row) => row.active);
+  return <AdminPage title="Overview" description="Orders, delivery and inventory at a glance.">
+    {(query.updated === "1" || query.created === "1") && <Notice tone="success">Product saved.</Notice>}
+    <div className="admin-metrics">
+      <section className="panel admin-metric"><strong>{countFor("pending")}</strong><Link href="/admin/orders?status=pending">Awaiting customer confirmation</Link></section>
+      <section className="panel admin-metric"><strong>{countFor("confirmed", "preparing", "out_for_delivery", "failed_delivery")}</strong><Link href="/admin/orders">Awaiting delivery</Link></section>
+      <section className="panel admin-metric"><strong>{active.reduce((total, row) => total + row.stock, 0)} units</strong><Link href="/admin/products">{active.length} active battery listings</Link></section>
+    </div>
+    <div className="product-layout mt-4">
+      <section className="panel operations-card"><h2>Recent orders</h2>
+        {recent.map((order) => <div className="flex flex-wrap gap-2 border-b pb-2" key={order.id}><Link className="text-link" href={"/admin/orders/" + order.id}>PB-{order.id}</Link>
+          <span className="muted">{order.city}</span><AdminStatus tone="active">{orderStatusLabel(order.status)}</AdminStatus></div>)}
+        {!recent.length && <p>No orders yet.</p>}
+      </section>
+      <section className="panel operations-card"><h2>Low stock</h2><p className="muted">Active listings with three or fewer units.</p>
+        {stock.map((product) => <div className="flex justify-between gap-2 border-b pb-2" key={product.id}>
+          <Link className="text-link" href={"/admin/products/" + product.id + "/edit"}>{product.brand} {product.model}</Link><span>{product.stock}</span></div>)}
+        {!stock.length && <p>No active listings are low on stock.</p>}
+      </section>
+    </div>
+  </AdminPage>;
 }

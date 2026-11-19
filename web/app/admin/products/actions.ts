@@ -5,11 +5,12 @@ import { Pool } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-serverless";
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
-import { eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 
 import { requireAdmin } from "@/lib/require-admin";
 import { parseProductDraft } from "@/lib/admin-product-data";
 import { db } from "@/db";
+import { BATTERY_CATEGORIES } from "@/lib/store-policy";
 import {
     batteryCompatibility,
     products,
@@ -17,6 +18,7 @@ import {
 } from "@/db/schema";
 
 class InvalidFitment extends Error { }
+class StockChanged extends Error { }
 
 // VALIDATE SELECTED VEHICLES
 function assertVehicleIds(
@@ -113,7 +115,7 @@ export async function createProduct(
                             .from(vehicles)
                             .where(
                                 inArray(vehicles.id, vehicleIds)
-                            );
+                            ).orderBy(asc(vehicles.id)).for("share");
 
                         assertVehicleIds(
                             matched,
@@ -181,6 +183,7 @@ export async function createProduct(
 // UPDATE EXISTING PRODUCT
 export async function updateProduct(
     productId: number,
+    originalStock: number,
     formData: FormData
 ) {
     await requireAdmin();
@@ -208,7 +211,8 @@ export async function updateProduct(
 
     const parsed = parseProductDraft(
         formData,
-        existing.category
+        existing.category,
+        existing.imageUrls
     );
 
     if (!parsed) {
@@ -219,6 +223,7 @@ export async function updateProduct(
 
     let status:
         | "updated"
+        | "stock"
         | "invalid"
         | "database" = "database";
 
@@ -244,7 +249,7 @@ export async function updateProduct(
                                 vehicles.id,
                                 vehicleIds
                             )
-                        );
+                        ).orderBy(asc(vehicles.id)).for("share");
 
                     assertVehicleIds(
                         matched,
@@ -253,20 +258,18 @@ export async function updateProduct(
                     );
                 }
 
-                // UPDATE PRODUCT FIELDS
+                const { stock, ...fields } = draft;
+                const stockChanged = stock !== originalStock;
                 const updated = await tx
                     .update(products)
-                    .set(draft)
-                    .where(
-                        eq(products.id, productId)
-                    )
+                    .set({ ...fields, stock: stockChanged ? stock : undefined })
+                    .where(and(eq(products.id, productId), stockChanged ? eq(products.stock, originalStock) : undefined))
                     .returning({
                         id: products.id,
                     });
 
-                if (updated.length === 0) {
-                    throw new InvalidFitment();
-                }
+                if (updated.length === 0) throw new StockChanged();
+                if (!BATTERY_CATEGORIES.some((category) => category === draft.category)) return;
 
                 // REMOVE PREVIOUS COMPATIBILITY
                 await tx
@@ -294,7 +297,9 @@ export async function updateProduct(
 
         status = "updated";
     } catch (error) {
-        if (error instanceof InvalidFitment) {
+        if (error instanceof StockChanged) {
+            status = "stock";
+        } else if (error instanceof InvalidFitment) {
             status = "invalid";
         } else {
             console.error(

@@ -7,6 +7,7 @@ import {
   boolean,
   jsonb,
   timestamp,
+  index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
@@ -162,7 +163,7 @@ export const orders = pgTable("orders", {
 
   advancePercentage: integer("advance_percentage")
     .notNull()
-    .default(20),
+    .default(0),
 
   amountDueNowPaise: integer("amount_due_now_paise")
     .notNull()
@@ -174,6 +175,10 @@ export const orders = pgTable("orders", {
 
   balanceDuePaise: integer("balance_due_paise")
     .notNull(),
+  finalTotalPaise: integer("final_total_paise"),
+  trackingTokenHash: text("tracking_token_hash").unique(),
+  requestHash: text("request_hash"),
+  stockRestoredAt: timestamp("stock_restored_at"),
 
   createdAt: timestamp("created_at")
     .notNull()
@@ -218,4 +223,35 @@ export const orderItems = pgTable("order_items", {
 
   lineTotalPaise: integer("line_total_paise")
     .notNull(),
+  withExchangeUnitPricePaise: integer("with_exchange_unit_price_paise"),
+  finalLineTotalPaise: integer("final_line_total_paise"),
+  approvedExchangeQuantity: integer("approved_exchange_quantity"),
+});
+
+export const orderEvents = pgTable("order_events", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").notNull().references(() => orders.id, { onDelete: "restrict" }),
+  actorId: text("actor_id"),
+  kind: text("kind").notNull(),
+  details: jsonb("details").$type<Record<string, string | number | null>>().notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("order_events_order_id_idx").on(table.orderId, table.id)]);
+
+export const notificationOutbox = pgTable("notification_outbox", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull().references(() => orderEvents.id, { onDelete: "restrict" }),
+  channel: text("channel").notNull(),
+  status: text("status").notNull().default("awaiting_provider"),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: timestamp("next_attempt_at"),
+  deliveredAt: timestamp("delivered_at"),
+  providerMessageId: text("provider_message_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [uniqueIndex("notification_outbox_event_channel_idx").on(table.eventId, table.channel)]);
+
+export const storeSettings = pgTable("store_settings", {
+  id: integer("id").primaryKey(),
+  supportPhone: text("support_phone"),
+  supportEmail: text("support_email"),
+  serviceMessage: text("service_message"),
 });

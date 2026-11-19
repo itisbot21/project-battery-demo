@@ -1,4 +1,6 @@
 
+import { validImageReference } from "./image-reference";
+
 /** Validation shared by the admin create/update Server Actions. */
 export type ProductDraft = {
     brand: string;
@@ -74,37 +76,13 @@ function parseLines(
         : null;
 }
 
-function validBlobUrl(value: string): boolean {
-    try {
-        const url = new URL(value);
-
-        return (
-            url.protocol === "https:" &&
-            url.hostname.endsWith(
-                ".blob.vercel-storage.com"
-            ) &&
-            value.length <= 700 &&
-            !url.username &&
-            !url.password
-        );
-    } catch {
-        return false;
-    }
-}
-
-/**
- * Product images must come from our authenticated
- * Vercel Blob upload endpoint.
- */
-function parseImageUrls(
-    data: FormData
-): string[] | null {
+function parseImageUrls(data: FormData, existing: string[]): string[] | null {
     try {
         const raw: unknown = JSON.parse(
             field(data, "imageUrls") || "[]"
         );
 
-        if (!Array.isArray(raw) || raw.length > 5) {
+        if (!Array.isArray(raw) || raw.length > Math.max(5, existing.length)) {
             return null;
         }
 
@@ -112,7 +90,7 @@ function parseImageUrls(
             !raw.every(
                 (url) =>
                     typeof url === "string" &&
-                    validBlobUrl(url)
+                    (existing.includes(url) || validImageReference(url))
             )
         ) {
             return null;
@@ -126,7 +104,8 @@ function parseImageUrls(
 
 export function parseProductDraft(
     data: FormData,
-    existingLegacyCategory?: string
+    existingLegacyCategory?: string,
+    existingImages: string[] = []
 ): {
     draft: ProductDraft;
     vehicleIds: number[];
@@ -186,7 +165,7 @@ export function parseProductDraft(
         240
     );
 
-    const imageUrls = parseImageUrls(data);
+    const imageUrls = parseImageUrls(data, existingImages);
     const vehicleValues = data.getAll("vehicleIds");
 
     // VALIDATE PRODUCT DATA
@@ -198,10 +177,7 @@ export function parseProductDraft(
         !(
             category === "Car" ||
             category === "Bike" ||
-            (
-                category === existingLegacyCategory &&
-                ["Inverter", "Truck"].includes(category)
-            )
+            (category && category === existingLegacyCategory)
         ) ||
         capacityAh === undefined ||
         (capacityAh !== null && capacityAh < 1) ||
@@ -226,7 +202,7 @@ export function parseProductDraft(
             (warrantyProRataMonths ?? 0) >
             warrantyMonths
         ) ||
-        stock === undefined ||
+        stock == null ||
         mrpPaise === null ||
         withoutExchangePaise === null ||
         withExchangePaise === null ||

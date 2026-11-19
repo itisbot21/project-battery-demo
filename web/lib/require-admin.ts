@@ -10,7 +10,7 @@ export async function requireAdmin() {
 
   if (!session) redirect("/admin/login");
 
-  const roles = session.user.role?.split(",") ?? [];
+  const roles = session.user.role?.split(",").map((role) => role.trim()) ?? [];
   if (!roles.includes("admin")) notFound();
 
   return session;

@@ -7,9 +7,9 @@
 
 @theme inline {
   /* Typography */
-  --font-sans: var(--font-roboto);
+  --font-sans: var(--font-geist);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-display);
+  --font-heading: var(--font-geist);
 
   /* Theme colors */
   --color-background: var(--background);
